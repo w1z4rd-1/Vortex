@@ -15,10 +15,10 @@ warnings.filterwarnings("ignore", category=UserWarning)  # Suppress FFMPEG warni
 
 # Load environment variables
 load_dotenv()
-
 # API keys and model paths
-PORCUPINE_KEY = os.getenv("PORCUPINE_KEY", "8/P39p9rRTTjHIHY49yYs76jv8hy5IXH7NDJpheYfSMSSau2E+TFHw==")
-MODEL_PATH = "C:/Users/Terac/ALFRED/Jarvis.ppn"  # Adjust this path if needed
+PORCUPINE_KEY = os.getenv("PORCUPINE_ACCESS_KEY")
+
+MODEL_PATH = "VORTEX.ppn"  # Adjust this path if needed
 
 # ANSI Escape Codes for Colors
 COLOR_GREEN = "\033[92m"  # Debug Green
@@ -36,10 +36,11 @@ whisper_model = whisper.load_model("base")  # Change to "tiny", "small", etc. fo
 # ------------------------------
 def detect_wake_word():
     """Listens for the wake word and returns True when detected."""
+
     if get_debug_mode():
         print(f"{COLOR_GREEN}\nListening for wake word...{COLOR_RESET}")
-
     porcupine = pvporcupine.create(access_key=PORCUPINE_KEY, keyword_paths=[MODEL_PATH])
+    
     recorder = PvRecorder(device_index=-1, frame_length=porcupine.frame_length)
     recorder.start()
 
@@ -48,6 +49,7 @@ def detect_wake_word():
             pcm = np.array(recorder.read(), dtype=np.int16)
             keyword_index = porcupine.process(pcm)
             if keyword_index >= 0:
+                print(f"{COLOR_GREEN}══════════════════════════════════════════{COLOR_RESET}")
                 if get_debug_mode():
                     print(f"{COLOR_GREEN}Wake word detected! Starting transcription...{COLOR_RESET}")
                 return True

@@ -5,16 +5,29 @@ from googleapiclient.discovery import build
 import subprocess
 import os
 import tempfile
+import glob
+import ctypes
+from ctypes import wintypes
 import markdown
 import webbrowser
 import wikipediaapi
 import json
-import glob
+import openai  # Add this import
+from dotenv import load_dotenv
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 debug_mode = False
 TOKEN_PATH = "token.json"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+COLOR_BLUE = "\033[94m"
+COLOR_GREEN = "\033[92m"
+COLOR_RED = "\033[91m"
+COLOR_RESET = "\033[0m"
+COLOR_YELLOW = "\033[33m"
+COLOR_CYAN = "\033[96m"
+load_dotenv()
 GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
 GOOGLE_SEARCH_CSE_ID = os.getenv("GOOGLE_SEARCH_CSE_ID")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Add this at the top
 # Debug mode function
 def set_debug_mode(value: bool):
     """Sets the global debug mode."""
@@ -143,53 +156,113 @@ def create_event(summary: str, start_time: str, duration: int = 60) -> dict:
 # 🚀 ------------------
 # Launch a Program
 # --------------------
+last_multiple_matches = {}
+def clarify_and_launch(clarified_name: str):
+    """
+    Launches a program if the user clarifies their choice after multiple matches were found.
+    """
+    global last_multiple_matches
+
+    if not last_multiple_matches:
+        return "⚠️ No previous ambiguous matches found. Try specifying the program again."
+
+    # Find clarified match
+    selected_path = last_multiple_matches.get(clarified_name)
+    if selected_path:
+        subprocess.run(["cmd.exe", "/c", "start", "", selected_path], shell=True)
+        last_multiple_matches = {}  # Clear stored matches
+        return f"✅ Launched: {clarified_name}"
+    
+    return f"❌ '{clarified_name}' not found in the previous list. Try again."
+import subprocess
+
 def launch_shortcut(program_name: str):
     """
-    Launches a program by name, using the Start Menu shortcuts or custom shortcuts.
-    If multiple programs match, it returns a list instead of launching immediately.
+    Launches a program by name, using the Start Menu shortcuts or a custom shortcut path.
     """
-    shortcuts = get_start_menu_shortcuts()
+    shortcut_path = get_shortcut_path(program_name)
 
-    # 🔍 Find matching programs
-    matches = {name: path for name, path in shortcuts.items() if program_name.lower() in name.lower()}
+    # If multiple matches were found earlier, handle the response properly
+    if isinstance(shortcut_path, list):
+        return f"⚠️ Multiple matches found: {shortcut_path}"
 
-    if not matches:
-        return f"❌ No program found matching '{program_name}'."
+    # If shortcut path is found, launch it
+    if shortcut_path and isinstance(shortcut_path, str):
+        try:
+            subprocess.run(["cmd.exe", "/c", "start", "", shortcut_path], shell=True)
+            return f"✅ Launched: {program_name}"
+        except Exception as e:
+            return f"❌ Failed to launch {program_name}: {str(e)}"
+    
+    return f"❌ No valid shortcut found for '{program_name}'."
 
-    if len(matches) > 1:
-        return f"⚠️ Multiple matches found: {list(matches.keys())}"
 
-    # ✅ Launch the program
-    program_path = list(matches.values())[0]
-    subprocess.run(["cmd.exe", "/c", "start", "", program_path], shell=True)
-    return f"✅ Launched: {program_name}"
 # 🗂️ -----------------------------
 # Get All Start Menu Shortcuts
 # -------------------------------
 START_MENU_PATH = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+# Custom shortcut file (user-defined programs)
 CUSTOM_SHORTCUTS_FILE = "custom_shortcuts.txt"
-def get_start_menu_shortcuts():
+def get_shortcut_path(shortcut_name):
     """
-    Retrieves all program shortcuts from the Windows Start Menu folder + a custom text file.
-    Returns a dictionary with program names and their full paths.
+    Given a shortcut name, returns the full path of the shortcut.
     """
-    shortcuts = {}
+    possible_dirs = [
+        os.path.join(os.getenv("PROGRAMDATA"), "Microsoft\\Windows\\Start Menu\\Programs"),
+        os.path.join(os.getenv("APPDATA"), "Microsoft\\Windows\\Start Menu\\Programs"),
+        os.path.join(os.path.expanduser("~"), "Desktop"),
+        os.path.join(os.path.expanduser("~"), "Downloads"),
+    ]
 
-    # 🔍 Search for .lnk (shortcut) files in Start Menu folders
-    for shortcut_path in glob.glob(os.path.join(START_MENU_PATH, "**", "*.lnk"), recursive=True):
-        program_name = os.path.splitext(os.path.basename(shortcut_path))[0]
-        shortcuts[program_name] = shortcut_path
+    for directory in possible_dirs:
+        if os.path.exists(directory):
+            for shortcut in glob.glob(os.path.join(directory, "**", "*.lnk"), recursive=True):
+                if os.path.splitext(os.path.basename(shortcut))[0].lower() == shortcut_name.lower():
+                    return shortcut  # Return the first match
 
-    # 📄 Load additional shortcuts from custom_shortcuts.txt
-    if os.path.exists(CUSTOM_SHORTCUTS_FILE):
-        with open(CUSTOM_SHORTCUTS_FILE, "r", encoding="utf-8") as file:
-            for line in file:
-                line = line.strip()
-                if line and "=" in line:
-                    name, path = line.split("=", 1)
-                    shortcuts[name.strip()] = path.strip()
+    return "❌ Shortcut not found."
 
-    return shortcuts
+# Windows Known Folder GUIDs
+FOLDERID_Desktop = "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}"
+FOLDERID_Downloads = "{374DE290-123F-4565-9164-39C4925E467B}"
+
+def get_known_folder(folder_id):
+    """Retrieves the actual path of a Windows Known Folder using its GUID."""
+    SHGetKnownFolderPath = ctypes.windll.shell32.SHGetKnownFolderPath
+    SHGetKnownFolderPath.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.HANDLE, ctypes.POINTER(ctypes.c_wchar_p)
+    ]
+    SHGetKnownFolderPath.restype = ctypes.c_long  # Fixed: Use c_long instead of HRESULT
+
+    path_ptr = ctypes.c_wchar_p()
+    if SHGetKnownFolderPath(folder_id, 0, None, ctypes.byref(path_ptr)) == 0:
+        return path_ptr.value
+    return None
+
+def get_shortcuts():
+    """
+    Retrieves all program shortcuts from the Start Menu, Desktop, and Downloads.
+    Returns a list of shortcut names **only** (without file paths).
+    """
+    shortcut_paths = []
+    start_menu_paths = [
+        os.path.join(os.getenv("PROGRAMDATA"), "Microsoft\\Windows\\Start Menu\\Programs"),
+        os.path.join(os.getenv("APPDATA"), "Microsoft\\Windows\\Start Menu\\Programs"),
+    ]
+    user_dirs = [
+        os.path.join(os.path.expanduser("~"), "Desktop"),
+        os.path.join(os.path.expanduser("~"), "Downloads"),
+    ]
+
+    # Search all defined directories for shortcuts
+    for directory in start_menu_paths + user_dirs:
+        if os.path.exists(directory):
+            for shortcut in glob.glob(os.path.join(directory, "**", "*.lnk"), recursive=True):
+                shortcut_name = os.path.splitext(os.path.basename(shortcut))[0]
+                shortcut_paths.append(shortcut_name)
+
+    return shortcut_paths  # Only return names, not paths
+
 # ---------------------------
 # 📅 LIST UPCOMING EVENTS FUNCTION
 # ---------------------------
@@ -274,6 +347,74 @@ def search_query(query):
     # ❌ **Step 3: Neither Wikipedia nor Google Worked**
     return "Information inaccessible, do not guess."
 
+import os
+import tempfile
+import pyautogui
+import openai
+import base64
+import requests
+import os
+import tempfile
+
+VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
+
+# Ensure the VORTEX directory exists
+if not os.path.exists(VORTEX_TEMP_DIR):
+    os.makedirs(VORTEX_TEMP_DIR)
+
+
+import os
+import webbrowser
+import requests
+
+import os
+import webbrowser
+import requests
+
+import os
+import webbrowser
+import requests
+import openai
+
+def generate_image(prompt: str, save_path: str = None):
+    """Generates an image using DALL-E and saves it or displays it."""
+    try:
+        # Default to VORTEX temp directory
+        if not save_path:
+            save_path = os.path.join(VORTEX_TEMP_DIR, "generated_image.png")
+        else:
+            save_path = os.path.abspath(os.path.expandvars(save_path))
+        
+        # Ensure directory exists
+        directory = os.path.dirname(save_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+
+        # OpenAI API call
+        response = client.images.generate(
+            prompt=prompt,
+            size="1024x1024",
+            n=1,
+            response_format="url"
+        )
+
+        # Download and save image
+        image_url = response.data[0].url
+        image_data = requests.get(image_url).content
+        
+        with open(save_path, "wb") as f:
+            f.write(image_data)
+        
+        webbrowser.open(save_path)
+        return f"✅ Image saved to: {save_path}"
+
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+
+
+
 def display_markdown(content: str):
     """
     Creates a Markdown file, converts it to HTML using markdown package, and opens it in a web browser.
@@ -344,28 +485,173 @@ def display_markdown(content: str):
     except Exception as e:
         return f"❌ Error displaying markdown: {e}"
     
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
+if not os.path.exists(VORTEX_TEMP_DIR):
+    os.makedirs(VORTEX_TEMP_DIR)
+
+def analyze_image(image_path: str = None):
+    """
+    Analyzes an image using GPT-4o's vision capabilities.
+    If no path is provided, it captures a screenshot.
+
+    Parameters:
+    - image_path (str, optional): The file path of the image to analyze. If None, takes a screenshot.
+
+    Returns:
+    - dict: Description of the analyzed image.
+    """
+    try:
+        if not image_path:
+            # Take a screenshot
+            screenshot_path = os.path.join(VORTEX_TEMP_DIR, "screenshot.png")
+            screenshot = pyautogui.screenshot()
+            screenshot.save(screenshot_path)
+            image_path = screenshot_path
+
+        if not os.path.exists(image_path):
+            return {"error": "❌ Image file not found."}
+
+        # Convert image to base64
+        with open(image_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode("utf-8")
+
+        # Call OpenAI's GPT-4o vision API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Describe the image in detail."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "What do you see in this image?"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                ]}
+            ]
+        )
+        
+        description = response.choices[0].message.content
+        return {"message": "✅ Image analyzed successfully!", "description": description}
+
+    except Exception as e:
+        return {"error": f"❌ Error analyzing image: {e}"}
+
+
 # ---------------------------
 # 🔗 FUNCTION REGISTRY FOR OpenAI FUNCTION CALLING
 # ---------------------------
 function_registry = {
     "open_link": open_link,
-    "get_start_menu_shortcuts": get_start_menu_shortcuts,
+    "get_shortcut_path": get_shortcut_path,
+    "get_shortcuts": get_shortcuts,
+    "clarify_and_launch": clarify_and_launch,
     "launch_shortcut": launch_shortcut,
-    "get_user_info": get_user_info, #based on ip adress HACKKKKERRRR
+    "get_user_info": get_user_info,  # based on IP address
     "get_time": get_time,
-    "create_event": create_event, # use my google calender :>
+    "create_event": create_event,  # use my Google Calendar
     "list_events": list_events,
     "display_markdown": display_markdown,
-    "search_query": search_query, #use wikipidia and google to find info
+    "search_query": search_query,  # use Wikipedia and Google to find info
     "debugmode": set_debug_mode,
+    "generate_image": generate_image,
+    "analyze_image": analyze_image
 }
 
 function_schemas = [
     {
     "type": "function",
     "function": {
+        "name": "youtube_search",
+        "description": "Searches YouTube for a specific query and opens the results in a browser.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query for YouTube."
+                }
+            },
+            "required": ["query"]
+        }
+    }
+},
+{
+    "type": "function",
+    "function": {
+        "name": "modrinth_search",
+        "description": "Searches Modrinth for Minecraft mods based on the given query.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query for Modrinth."
+                }
+            },
+            "required": ["query"]
+        }
+    }
+},
+{
+    "type": "function",
+    "function": {
+        "name": "generate_image",
+        "description": "Generates an image using DALL-E based on a given prompt. Optionally, specify a file path to save the image.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "A detailed prompt describing the image to generate."
+                },
+                "save_path": {
+                    "type": "string",
+                    "description": "Optional. The file path to save the generated image. If not specified, it will be saved in the %temp%/VORTEX directory."
+                }
+            },
+            "required": ["prompt"]
+        }
+    }
+},
+{
+    "type": "function",
+    "function": {
+        "name": "clarify_and_launch",
+        "description": "Launches a program after the user clarifies their choice from multiple matches.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "clarified_name": {
+                    "type": "string",
+                    "description": "The exact name of the program to launch from the previously listed matches."
+                }
+            },
+            "required": ["clarified_name"]
+        }
+    }
+},
+{
+    "type": "function",
+    "function": {
+        "name": "analyze_image",
+        "description": "Analyzes an image to extract details. If no file path is provided, it takes a screenshot and analyzes that instead.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "image_path": {
+                    "type": "string",
+                    "description": "Optional. The file path of the image to analyze. If not provided, a screenshot will be taken."
+                }
+            },
+            "required": []
+        }
+    }
+},
+
+    {
+    "type": "function",
+    "function": {
         "name": "debugmode",
-        "description": "Enables or disables debug mode, when debug mode is on, additional information about what tools/functions were used as well as what they returned and what arguments were used gets printed",
+        "description": "Enables or disables debug mode, when debug mode is on, additional information about what tools/functions were used as well as what they returned and what arguments were used gets printed accepts true/false ONLY",
         "parameters": {
             "type": "object",
             "properties": {
@@ -396,22 +682,40 @@ function_schemas = [
         }
     },
     {
-        "type": "function",
-        "function": {
-            "name": "get_start_menu_shortcuts",
-            "description": "Retrieves a list of all installed programs from the Windows Start Menu and custom shortcuts.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
+    "type": "function",
+    "function": {
+        "name": "get_shortcuts",
+        "description": "Lists all available program shortcuts from the Start Menu, Desktop, and Downloads. Returns only shortcut names to save tokens.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
         }
-    },
+    }
+},
+{
+    "type": "function",
+    "function": {
+        "name": "get_shortcut_path",
+        "description": "Retrieves the file path of a specific shortcut by name.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "shortcut_name": {
+                    "type": "string",
+                    "description": "The name of the shortcut to find."
+                }
+            },
+            "required": ["shortcut_name"]
+        }
+    }
+},
+
     {
         "type": "function",
         "function": {
             "name": "launch_shortcut",
-            "description": "Launches a program by name using its Start Menu shortcut or a custom-defined shortcut.",
+            "description": "Lauches a program based on whatever name u got from get_shortcuts",
             "parameters": {
                 "type": "object",
                 "properties": {
