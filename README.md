@@ -1,4 +1,4 @@
-# VORTEX - Voice-Operated Omniscient Responsive Task Execution eXpert 🚀🤖  
+# VORTEX - Voice-Operated Responsive Task Execution eXpert 🚀🤖  
 
 [![GitHub Stars](https://img.shields.io/github/stars/w1z4rd-1/Vortex?style=flat-square)](https://github.com/w1z4rd-1/Vortex/stargazers)  
 [![GitHub Forks](https://img.shields.io/github/forks/w1z4rd-1/Vortex?style=flat-square)](https://github.com/w1z4rd-1/Vortex/network/members)  
