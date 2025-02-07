@@ -36,41 +36,70 @@ conversation_history = [
     {"role": "system", "content": load_system_prompt()}
 ]
 
+def load_system_prompt():
+    """Loads the system prompt from systemprompt.txt or defaults if the file is missing."""
+    file_path = "systemprompt.txt"
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read().strip()
+            if content:
+                return content  # Return the file content if it's not empty
+    return "You are VORTEX, a highly intelligent assistant."
+
+conversation_history = [
+    {"role": "system", "content": load_system_prompt()}
+]
+
 async def call_openai():
     """Processes user input, executes functions, and returns results."""
     global conversation_history
 
-    while True:  # 🔄 Keep looping until no more function calls are needed
-        response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=conversation_history,
-        tools=function_schemas,
-        tool_choice="auto"
-)
+    if get_debug_mode():
+        print(f"{COLOR_GREEN}[🔄 STARTING call_openai()] Initial conversation history:{COLOR_RESET}")
+        for i, msg in enumerate(conversation_history):
+            print(f"{COLOR_YELLOW}[{i}] Type: {type(msg)} | Content: {msg}{COLOR_RESET}")
 
+    while True:  # 🔄 Loop while handling function calls
+        if get_debug_mode():
+            print(f"{COLOR_GREEN}[🔄 CALLING OPENAI] Sending updated conversation history...{COLOR_RESET}")
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=conversation_history,
+            tools=function_schemas,
+            tool_choice="auto"
+        )
 
         assistant_message = response.choices[0].message
         conversation_history.append(assistant_message)
 
-        # If OpenAI requests function calls
+        if get_debug_mode():
+            print(f"{COLOR_CYAN}[🤖 OPENAI RESPONSE] {COLOR_BLUE}{assistant_message.content}{COLOR_RESET}")
+
+        # ✅ Check if OpenAI requests tool calls
         if assistant_message.tool_calls:
             tool_responses = []
+
+            if get_debug_mode():
+                print(f"{COLOR_GREEN}[🔧 TOOL CALL DETECTED] OpenAI requested {len(assistant_message.tool_calls)} function calls.{COLOR_RESET}")
 
             for tool_call in assistant_message.tool_calls:
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
                 function_call_id = tool_call.id
 
+                if get_debug_mode():
+                    print(f"{COLOR_YELLOW}[🔄 CHECKING FUNCTION] ID: {tool_call.id} | Name: {function_name}{COLOR_RESET}")
+
                 # Check if function exists
                 function_to_call = function_registry.get(function_name)
                 if not function_to_call:
-                    if get_debug_mode():
-                        print(f"{COLOR_RED}\n[❌ ERROR] Function not found: {function_name}{COLOR_RESET}")
+                    print(f"{COLOR_RED}[❌ ERROR] Function not found: {function_name}{COLOR_RESET}")
                     continue
 
                 try:
                     if get_debug_mode():
-                        print(f"{COLOR_GREEN}\n[🔧 RUNNING FUNCTION] {function_name}({json.dumps(function_args)}){COLOR_RESET}")
+                        print(f"{COLOR_YELLOW}[🚀 EXECUTING] Running {function_name}({json.dumps(function_args)}){COLOR_RESET}")
 
                     # Special handling for debug mode toggle
                     if function_name == "debugmode":
@@ -78,8 +107,10 @@ async def call_openai():
                         function_result = set_debug_mode(enable) if enable is not None else "❌ Missing 'enable' argument."
                     else:
                         function_result = function_to_call(**function_args)
+
                     if get_debug_mode():
-                        print(f"{COLOR_YELLOW}[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}{COLOR_RESET}")
+                        print(f"{COLOR_GREEN}[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}{COLOR_RESET}")
+
                     tool_responses.append({
                         "role": "tool",
                         "tool_call_id": function_call_id,
@@ -93,15 +124,33 @@ async def call_openai():
                         "content": json.dumps({"error": f"Execution failed: {str(e)}"})
                     })
 
+            # 🔍 DEBUG: Check conversation history before appending
+            if get_debug_mode():
+                print(f"{COLOR_YELLOW}[📜 HISTORY BEFORE APPEND] Last message: {conversation_history[-1] if conversation_history else 'Empty'}{COLOR_RESET}")
+
             # Store function results in history
             conversation_history.extend(tool_responses)
-        
-        else:
-            # 🛑 No more tool calls → Break loop and finalize response
-            break
+
+            # 🔍 DEBUG: Check conversation history after appending
+            if get_debug_mode():
+                print(f"{COLOR_GREEN}[📜 HISTORY AFTER APPEND] Last added message: {tool_responses[-1] if tool_responses else 'No tool responses'}{COLOR_RESET}")
+
+            # 🚨 CALL OpenAI AGAIN TO GET FINAL RESPONSE
+            continue  # Ensures OpenAI is re-called ONLY ONCE per function execution
+
+        # 🛑 No more function calls → Break loop
+        if get_debug_mode():
+            print(f"{COLOR_GREEN}[🛑 EXITING] No more function calls. Finalizing response...{COLOR_RESET}")
+        break  
 
     # 🏁 Final AI response after all tool calls
     print(f"{COLOR_CYAN}[🤖 VORTEX]: {COLOR_BLUE}{assistant_message.content}{COLOR_RESET}")
+
+
+
+
+
+
 def add_user_input(user_input):
     """Adds user input to the conversation history."""
     conversation_history.append({"role": "user", "content": user_input})

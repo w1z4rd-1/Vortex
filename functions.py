@@ -15,7 +15,13 @@ import json
 import re
 import openai  # Add this import
 from dotenv import load_dotenv
+import openai
+import numpy as np
+import faiss
+import openai
+import json
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
+MEMORY_FILE = "memory.json"
 debug_mode = False
 TOKEN_PATH = "token.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -174,10 +180,7 @@ def open_link(url: str):
         webbrowser.open(url)
         return f"✅ Opened: {url}"
     return "❌ Invalid or missing URL. AI must not guess links."
-
-# ---------------------------
-# 📅 CREATE EVENT FUNCTION
-# ---------------------------
+6
 def create_event(summary: str, start_time: str, duration: int = 60) -> dict:
     """
     Creates a Google Calendar event.
@@ -297,7 +300,6 @@ def get_known_folder(folder_id):
     if SHGetKnownFolderPath(folder_id, 0, None, ctypes.byref(path_ptr)) == 0:
         return path_ptr.value
     return None
-
 def youtube_search(query: str) -> str:
     """
     Searches YouTube for a specific query and opens the results in a browser.
@@ -316,7 +318,6 @@ def youtube_search(query: str) -> str:
     
     webbrowser.open(search_url)
     return f"✅ Opened YouTube search for: {query}"
-
 def modrinth_search(query: str) -> str:
     """
     Searches Modrinth for Minecraft mods based on the given query.
@@ -408,6 +409,103 @@ def list_events(max_results=10, time_min=None, time_max=None, order_by="startTim
     except Exception as e:
         return {"error": f"❌ Failed to list events: {str(e)}"}
     
+import requests
+from datetime import datetime
+
+def get_weather_forecast(latitude: float, longitude: float, forecast_type: str, timezone="auto"):
+    """
+    Fetches a weather forecast from the Open-Meteo API.
+
+    Parameters:
+    - latitude (float): Geographical latitude.
+    - longitude (float): Geographical longitude.
+    - forecast_type (str): "day" for daily forecast, "week" for today's hourly forecast.
+    - timezone (str): Timezone setting, default is "auto".
+
+    Returns:
+    - dict: Weather forecast data or an error message.
+    """
+
+    base_url = "https://api.open-meteo.com/v1/forecast"
+    today_date = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Configure query parameters based on forecast type
+    if forecast_type == "day":
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code",
+            "timezone": timezone
+        }
+    elif forecast_type == "week":
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": "temperature_2m,precipitation,wind_speed_10m,weather_code",
+            "forecast_days": 7,
+            "timezone": timezone
+        }
+    else:
+        return {"error": "Invalid forecast_type. Choose 'day' or 'week'."}
+
+    try:
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Process daily forecast
+        if forecast_type == "day":
+            forecast = data.get("daily", {})
+            human_readable = f"🌡️ High: {forecast['temperature_2m_max'][0]}°C | ❄️ Low: {forecast['temperature_2m_min'][0]}°C | ☔ Rain: {forecast['precipitation_sum'][0]}mm"
+            return {
+                "location": {"latitude": latitude, "longitude": longitude},
+                "timezone": data.get("timezone"),
+                "summary": human_readable,
+                "daily_forecast": forecast
+            }
+
+        # Process weekly forecast but return only today's data
+        elif forecast_type == "week":
+            hourly_forecast = data.get("hourly", {})
+            times = hourly_forecast.get("time", [])
+
+            today_indices = [i for i, time in enumerate(times) if time.startswith(today_date)]
+
+            # Extract only today's hourly data
+            filtered_forecast = {
+                "time": [hourly_forecast["time"][i] for i in today_indices],
+                "temperature_2m": [hourly_forecast["temperature_2m"][i] for i in today_indices],
+                "precipitation": [hourly_forecast["precipitation"][i] for i in today_indices],
+                "wind_speed_10m": [hourly_forecast["wind_speed_10m"][i] for i in today_indices],
+                "weather_code": [hourly_forecast["weather_code"][i] for i in today_indices]
+            }
+
+            # Generate human-readable summary
+            max_temp = max(filtered_forecast["temperature_2m"])
+            min_temp = min(filtered_forecast["temperature_2m"])
+            max_wind = max(filtered_forecast["wind_speed_10m"])
+            total_rain = sum(filtered_forecast["precipitation"])
+
+            weather_summary = (
+                f"🌡️ High: {max_temp}°C | ❄️ Low: {min_temp}°C | 💨 Wind: {max_wind} km/h | ☔ Rain: {total_rain:.1f}mm"
+            )
+
+            # Format as list of times & temperatures
+            formatted_forecast = [
+                f"{time[-5:]} - {temp}°C"
+                for time, temp in zip(filtered_forecast["time"], filtered_forecast["temperature_2m"])
+            ]
+
+            return {
+                "location": {"latitude": latitude, "longitude": longitude},
+                "timezone": data.get("timezone"),
+                "summary": weather_summary,
+                "hourly_forecast_today": formatted_forecast
+            }
+
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API request failed: {str(e)}"}
+
 def search_query(query):
     """Searches Wikipedia first, and falls back to Google Search API if needed."""
     
@@ -506,11 +604,6 @@ def generate_image(prompt: str, save_path: str = None):
 
     except Exception as e:
         return f"❌ Error: {str(e)}"
-
-
-
-
-
 def display_markdown(content: str):
     """
     Creates a Markdown file, converts it to HTML using markdown package, and opens it in a web browser.
@@ -586,6 +679,154 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
 if not os.path.exists(VORTEX_TEMP_DIR):
     os.makedirs(VORTEX_TEMP_DIR)
+import requests
+from datetime import datetime, timedelta
+
+def get_weather_forecast(latitude, longitude, forecast_mode, timezone="auto"):
+    """
+    Fetches a weather forecast from the Open-Meteo API.
+
+    Parameters:
+    - latitude (float): Latitude of the location.
+    - longitude (float): Longitude of the location.
+    - forecast_mode (str): "hourly_today" for today's hour-by-hour breakdown, "daily_week" for a 7-day summary.
+    - timezone (str, optional): Timezone for formatting (default: "auto").
+
+    Returns:
+    - str: A formatted weather forecast.
+    """
+    try:
+        base_url = "https://api.open-meteo.com/v1/forecast"
+        
+        # Define API parameters based on forecast mode
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": timezone,
+        }
+
+        if forecast_mode == "hourly_today":
+            params.update({
+                "hourly": "temperature_2m,weather_code",
+                "forecast_days": 1  # Get only today's data
+            })
+        elif forecast_mode == "daily_week":
+            params.update({
+                "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+                "forecast_days": 7
+            })
+        else:
+            return "❌ Invalid forecast mode. Use 'hourly_today' or 'daily_week'."
+
+        # API request
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Format response
+        if forecast_mode == "hourly_today":
+            return format_hourly_forecast(data)
+        elif forecast_mode == "daily_week":
+            return format_daily_forecast(data)
+
+    except requests.exceptions.RequestException as e:
+        return f"❌ Error fetching weather data: {e}"
+
+
+def format_hourly_forecast(data):
+    """
+    Formats the hourly weather forecast for today.
+
+    Parameters:
+    - data (dict): The API response.
+
+    Returns:
+    - str: Formatted hourly weather forecast.
+    """
+    try:
+        times = data["hourly"]["time"]
+        temperatures = data["hourly"]["temperature_2m"]
+        weather_codes = data["hourly"]["weather_code"]
+
+        # Get only today's data (0:00 - 23:59)
+        today_date = datetime.utcnow().strftime("%Y-%m-%d")
+        formatted_forecast = f"📅 **Today's Hourly Forecast:** {today_date}\n\n"
+
+        for time, temp, code in zip(times, temperatures, weather_codes):
+            hour = datetime.strptime(time, "%Y-%m-%dT%H:%M").strftime("%I:%M %p")
+            condition = interpret_weather_code(code)
+            formatted_forecast += f"🕒 {hour} - 🌡 {temp}°C - {condition}\n"
+
+        return formatted_forecast
+
+    except KeyError:
+        return "❌ Error parsing hourly forecast data."
+
+
+def format_daily_forecast(data):
+    """
+    Formats the daily weather forecast for a week.
+
+    Parameters:
+    - data (dict): The API response.
+
+    Returns:
+    - str: Formatted daily weather forecast.
+    """
+    try:
+        times = data["daily"]["time"]
+        temp_max = data["daily"]["temperature_2m_max"]
+        temp_min = data["daily"]["temperature_2m_min"]
+        weather_codes = data["daily"]["weather_code"]
+
+        formatted_forecast = "📅 **Weekly Weather Forecast:**\n\n"
+
+        for date, max_temp, min_temp, code in zip(times, temp_max, temp_min, weather_codes):
+            day = datetime.strptime(date, "%Y-%m-%d").strftime("%A, %b %d")
+            condition = interpret_weather_code(code)
+            formatted_forecast += f"📆 {day} - 🌡 High: {max_temp}°C, Low: {min_temp}°C - {condition}\n"
+
+        return formatted_forecast
+
+    except KeyError:
+        return "❌ Error parsing daily forecast data."
+
+
+def interpret_weather_code(code):
+    """
+    Converts WMO weather codes into human-readable descriptions.
+
+    Parameters:
+    - code (int): WMO weather code.
+
+    Returns:
+    - str: Description of the weather condition.
+    """
+    weather_conditions = {
+        0: "Clear Sky ☀️",
+        1: "Mainly Clear 🌤",
+        2: "Partly Cloudy ⛅",
+        3: "Overcast ☁️",
+        45: "Fog 🌫",
+        48: "Freezing Fog ❄️🌫",
+        51: "Light Drizzle 🌦",
+        53: "Moderate Drizzle 🌧",
+        55: "Heavy Drizzle 🌧",
+        61: "Light Rain 🌦",
+        63: "Moderate Rain 🌧",
+        65: "Heavy Rain 🌧⛈",
+        71: "Light Snow 🌨",
+        73: "Moderate Snow ❄️",
+        75: "Heavy Snow ❄️❄️",
+        80: "Light Showers 🌦",
+        81: "Moderate Showers 🌧",
+        82: "Heavy Showers ⛈",
+        95: "Thunderstorm ⛈",
+        96: "Thunderstorm with Hail ⛈🌨",
+        99: "Severe Thunderstorm ⛈🔥"
+    }
+    return weather_conditions.get(code, "Unknown Weather 🤷‍♂️")
+
 
 def analyze_image(image_path: str = None):
     """
@@ -630,6 +871,115 @@ def analyze_image(image_path: str = None):
 
     except Exception as e:
         return {"error": f"❌ Error analyzing image: {e}"}
+MEMORY_FILE = "memory.json"
+
+def retrieve_memory(query, category=None):
+    """Finds the most relevant stored memory for a given query, optionally filtered by category."""
+    try:
+        # Generate embedding for query
+        response = openai.Embedding.create(input=query, model="text-embedding-3-small")
+        query_embedding = np.array(response["data"][0]["embedding"]).astype("float32").reshape(1, -1)
+
+        # Load memory
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                memory_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return "🤖 No memory stored yet."
+
+        if not memory_data:
+            return "🤖 No memory stored yet."
+
+        # Search in a specific category or all categories
+        categories_to_search = [category] if category else memory_data.keys()
+
+        best_match = None
+        highest_similarity = 0.0
+
+        for cat in categories_to_search:
+            if not memory_data.get(cat):
+                continue
+
+            # Prepare FAISS index before searching
+            embeddings = np.array([entry["embedding"] for entry in memory_data[cat]]).astype("float32")
+            if len(embeddings) == 0:
+                continue  # Skip empty category
+
+            index = faiss.IndexFlatL2(len(query_embedding[0]))  # Define the FAISS index
+            index.add(embeddings)  # Add all embeddings
+
+            D, I = index.search(query_embedding, 1)  # Search for closest match
+            similarity_score = 1 - D[0][0]
+
+            # Prevent negative similarity scores
+            similarity_score = max(0, similarity_score)
+
+            if similarity_score > highest_similarity:
+                highest_similarity = similarity_score
+                best_match = memory_data[cat][I[0][0]]["text"]
+
+        if highest_similarity > 0.7:
+            return f"🧠 Retrieved from memory: {best_match} (Score: {highest_similarity:.2f})"
+        else:
+            return "🤖 No relevant memory found."
+
+    except Exception as e:
+        return f"❌ Error retrieving memory: {e}"
+
+def summarize_category(category_name):
+    """Merges similar memories within a category to remove redundancy."""
+    try:
+        # Load stored memory
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                memory_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return "🤖 No memory stored yet."
+
+        if category_name not in memory_data or not memory_data[category_name]:
+            return f"🤖 No data found in category '{category_name}'."
+
+        # Get all memory texts in the category
+        memory_texts = [entry["text"] for entry in memory_data[category_name]]
+
+        # Ask GPT to summarize similar memories
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Merge similar items into a concise statement."},
+                {"role": "user", "content": f"Summarize these: {memory_texts}"}
+            ]
+        )
+
+        summarized_text = response["choices"][0]["message"]["content"].strip()
+
+        # Replace category content with the summarized version
+        memory_data[category_name] = [{"text": summarized_text}]
+
+        # Save the summarized memory
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory_data, f, indent=4)
+
+        return f"✅ Summarized '{category_name}': {summarized_text}"
+
+    except Exception as e:
+        return f"❌ Error summarizing category: {e}"
+
+def categorize_memory(text):
+    """Uses GPT to dynamically determine a category for a memory entry."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are categorizing stored knowledge. "
+                 "Assign a single short category name that best describes the input."},
+                {"role": "user", "content": f"Categorize this: {text}"}
+            ]
+        )
+        category = response["choices"][0]["message"]["content"].strip().lower()
+        return category
+    except Exception:
+        return "general"  # Explicitly return "general" if categorization fails
 
 
 # ---------------------------
@@ -642,7 +992,8 @@ function_registry = {
     "get_shortcuts": get_shortcuts,
     "clarify_and_launch": clarify_and_launch,
     "launch_shortcut": launch_shortcut,
-    "get_user_info": get_user_info,  # based on IP address
+    "get_weather_forecast": get_weather_forecast,
+    "get_user_info": get_user_info,  # based on IP address //todo see if i can get all aplicapable info from users computer
     "get_time": get_time,
     "create_event": create_event,  # use my Google Calendar
     "list_events": list_events,
@@ -656,6 +1007,36 @@ function_registry = {
 }
 
 function_schemas = [
+    {
+    "type": "function",
+    "function": {
+        "name": "get_weather_forecast",
+        "description": "Retrieves a weather forecast for a given location, either an hourly breakdown for today or a daily summary for a week. present it in a nice way for the user! also its unnessesary usualy to show weather from eariler in the day or week, use get_user_info if you dont know where the user is",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "number",
+                    "description": "Geographical latitude of the location."
+                },
+                "longitude": {
+                    "type": "number",
+                    "description": "Geographical longitude of the location."
+                },
+                "forecast_mode": {
+                    "type": "string",
+                    "enum": ["hourly_today", "daily_week"],
+                    "description": "\"hourly_today\" for today's hour-by-hour breakdown, \"daily_week\" for a 7-day summary."
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "The timezone to use for formatting. Defaults to 'auto'."
+                }
+            },
+            "required": ["latitude", "longitude", "forecast_mode"]
+        }
+    }
+},
     {
         "type": "function",
         "function": {
