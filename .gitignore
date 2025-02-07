@@ -3,3 +3,4 @@ token.json
 recorded_audio.wav
 creds.json
 output.md
+__pycache__/
