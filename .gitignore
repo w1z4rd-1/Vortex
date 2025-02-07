@@ -4,3 +4,7 @@ recorded_audio.wav
 creds.json
 output.md
 __pycache__/
+build.py
+build/
+VORTEX.spec
+dist/VORTEX.exe
