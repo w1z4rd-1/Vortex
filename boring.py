@@ -64,11 +64,13 @@ async def call_openai():
                 # Check if function exists
                 function_to_call = function_registry.get(function_name)
                 if not function_to_call:
-                    print(f"{COLOR_RED}\n[❌ ERROR] Function not found: {function_name}{COLOR_RESET}")
+                    if get_debug_mode():
+                        print(f"{COLOR_RED}\n[❌ ERROR] Function not found: {function_name}{COLOR_RESET}")
                     continue
 
                 try:
-                    print(f"{COLOR_GREEN}\n[🔧 RUNNING FUNCTION] {function_name}({json.dumps(function_args)}){COLOR_RESET}")
+                    if get_debug_mode():
+                        print(f"{COLOR_GREEN}\n[🔧 RUNNING FUNCTION] {function_name}({json.dumps(function_args)}){COLOR_RESET}")
 
                     # Special handling for debug mode toggle
                     if function_name == "debugmode":
@@ -76,8 +78,8 @@ async def call_openai():
                         function_result = set_debug_mode(enable) if enable is not None else "❌ Missing 'enable' argument."
                     else:
                         function_result = function_to_call(**function_args)
-
-                    print(f"{COLOR_YELLOW}[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}{COLOR_RESET}")
+                    if get_debug_mode():
+                        print(f"{COLOR_YELLOW}[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}{COLOR_RESET}")
                     tool_responses.append({
                         "role": "tool",
                         "tool_call_id": function_call_id,

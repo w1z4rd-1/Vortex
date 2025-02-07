@@ -12,6 +12,7 @@ import markdown
 import webbrowser
 import wikipediaapi
 import json
+import re
 import openai  # Add this import
 from dotenv import load_dotenv
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
@@ -28,12 +29,70 @@ load_dotenv()
 GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
 GOOGLE_SEARCH_CSE_ID = os.getenv("GOOGLE_SEARCH_CSE_ID")
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Add this at the top
+JSON_PATH = "powershell.json"
+
+with open(JSON_PATH, "r", encoding="utf-8") as f:
+    powershell_permissions = json.load(f)
+
+blacklisted = set(powershell_permissions["blacklisted"])
+ask_first = set(powershell_permissions["ask_first"])
+
 # Debug mode function
 def set_debug_mode(value: bool):
     """Sets the global debug mode."""
     global debug_mode
     debug_mode = value
+def powershell(permission: bool, command: str, returnoutput: bool = True) -> str:
+    """
+    Executes a PowerShell command with permission checking.
+    
+    Parameters:
+    - permission (bool): Did the user explicitly give permission to run this command?
+    - command (str): The PowerShell command to execute (may include arguments).
+    - returnoutput (bool, optional): Whether to capture and return output (default: True).
+    
+    Returns:
+    - str: Command output or execution status.
+    """
+    if not command.strip():
+        return "❌ No command provided."
 
+    # Extract the base command (first word)
+    base_command = command.split()[0]
+
+    # Check if command is blacklisted
+    if base_command in blacklisted:
+        return f"❌ Command '{base_command}' is blacklisted and cannot be executed."
+
+    # Check if command requires permission
+    if base_command in ask_first and not permission:
+        return "⛔ Command not executed, ask the user for permission."
+
+    try:
+        if returnoutput:
+            # Run PowerShell command headlessly and capture output
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+                capture_output=True, text=True, check=True
+            )
+            return result.stdout.strip() if result.stdout else "✅ Command executed successfully."
+        else:
+            # Open a new PowerShell window and execute the command
+            ps_script = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command {command}' -WindowStyle Normal"
+            error_check_script = f"Start-Sleep -Seconds 3; if ($?) {{ '✅ Command executed' }} else {{ '❌ Command failed' }}"
+            
+            # Run first command
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script], check=True)
+
+            # Check for errors after 3 seconds
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", error_check_script],
+                capture_output=True, text=True, check=True
+            )
+            return result.stdout.strip()
+            
+    except subprocess.CalledProcessError as e:
+        return f"❌ Error executing command: {e}"
 def get_debug_mode():
     """Returns the current debug mode state."""
     return debug_mode
@@ -239,6 +298,43 @@ def get_known_folder(folder_id):
         return path_ptr.value
     return None
 
+def youtube_search(query: str) -> str:
+    """
+    Searches YouTube for a specific query and opens the results in a browser.
+
+    Parameters:
+    - query (str): The search query for YouTube.
+
+    Returns:
+    - str: Success message.
+    """
+    if not query.strip():
+        return "❌ No search query provided."
+    
+    sanitized_query = re.sub(r"[^\w\s]", "", query).replace(" ", "+")
+    search_url = f"https://www.youtube.com/results?search_query={sanitized_query}"
+    
+    webbrowser.open(search_url)
+    return f"✅ Opened YouTube search for: {query}"
+
+def modrinth_search(query: str) -> str:
+    """
+    Searches Modrinth for Minecraft mods based on the given query.
+
+    Parameters:
+    - query (str): The search query for Modrinth.
+
+    Returns:
+    - str: Success message.
+    """
+    if not query.strip():
+        return "❌ No search query provided."
+
+    sanitized_query = re.sub(r"[^\w\s]", "", query).replace(" ", "+")
+    search_url = f"https://modrinth.com/mods?q={sanitized_query}&f=categories:utility&f=categories:optimization&g=categories:fabric&e=client"
+
+    webbrowser.open(search_url)
+    return f"✅ Opened Modrinth search for: {query}"
 def get_shortcuts():
     """
     Retrieves all program shortcuts from the Start Menu, Desktop, and Downloads.
@@ -540,6 +636,7 @@ def analyze_image(image_path: str = None):
 # 🔗 FUNCTION REGISTRY FOR OpenAI FUNCTION CALLING
 # ---------------------------
 function_registry = {
+    "powershell": powershell,
     "open_link": open_link,
     "get_shortcut_path": get_shortcut_path,
     "get_shortcuts": get_shortcuts,
@@ -553,10 +650,73 @@ function_registry = {
     "search_query": search_query,  # use Wikipedia and Google to find info
     "debugmode": set_debug_mode,
     "generate_image": generate_image,
-    "analyze_image": analyze_image
+    "analyze_image": analyze_image,
+    "modrinth_search": modrinth_search,
+    "youtube_search": youtube_search
 }
 
 function_schemas = [
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_search",
+            "description": "Searches YouTube for a specific query and opens the results in a browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query for YouTube."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "modrinth_search",
+            "description": "Searches Modrinth for Minecraft mods based on the given query.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query for Modrinth."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+    "type": "function",
+    "function": {
+        "name": "powershell",
+        "description": "Executes a PowerShell command with permission handling.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "permission": {
+                    "type": "boolean",
+                    "description": "Did the user explicitly give permission to run this command?"
+                },
+                "command": {
+                    "type": "string",
+                    "description": "The PowerShell command to execute. Can include arguments."
+                },
+                "returnoutput": {
+                    "type": "boolean",
+                    "description": "If true, captures and returns the command output. If false, runs the command in a new PowerShell window and checks for errors after 3 seconds.",
+                    "default": True
+                }
+            },
+            "required": ["permission", "command"]
+        }
+    }
+},
+
     {
     "type": "function",
     "function": {
