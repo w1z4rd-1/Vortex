@@ -4,7 +4,8 @@ import os
 from dotenv import load_dotenv
 from functions import function_registry, function_schemas
 from functions import set_debug_mode, get_debug_mode
-
+from functions import retrieve_memory
+set_debug_mode("false")
 VORTEX_VERSION = "Alpha"
 
 # Load API key
@@ -50,21 +51,35 @@ conversation_history = [
     {"role": "system", "content": load_system_prompt()}
 ]
 
-async def call_openai():
-    """Processes user input, executes functions, and returns results."""
-    global conversation_history
+import json
+from functions import retrieve_memory  # ✅ Import memory retrieval function
 
-    if get_debug_mode():
-        print(f"{COLOR_GREEN}[🔄 STARTING call_openai()] Initial conversation history:{COLOR_RESET}")
-        for i, msg in enumerate(conversation_history):
-            print(f"{COLOR_YELLOW}[{i}] Type: {type(msg)} | Content: {msg}{COLOR_RESET}")
+import json
+from functions import retrieve_memory  # ✅ Import memory retrieval function
+
+async def call_openai():
+    """Processes user input, retrieves relevant memories when needed, and executes functions."""
+    global conversation_history
+    user_input = conversation_history[-1]["content"]  # Get latest user message
+
+    # 🔍 Step 1: **Try Retrieving Memory Before Calling OpenAI**
+    print(f"{COLOR_YELLOW}[🧠 MEMORY CHECK] Searching for memories related to: {user_input}{COLOR_RESET}")
+
+    memories = retrieve_memory(user_input)
+
+    if memories and isinstance(memories, list) and len(memories) > 0:
+        memory_text = "\n".join(memories[:2])  # ✅ Limit recall to 2 most relevant memories
+        print(f"{COLOR_GREEN}[✅ MEMORY FOUND] Retrieved: {memory_text}{COLOR_RESET}")
+        conversation_history.append({"role": "system", "content": f"Before answering, recall this stored information: {memory_text}"})
+    else:
+        print(f"{COLOR_RED}[❌ NO MEMORY FOUND] No relevant memories were retrieved.{COLOR_RESET}")
 
     while True:  # 🔄 Loop while handling function calls
         if get_debug_mode():
             print(f"{COLOR_GREEN}[🔄 CALLING OPENAI] Sending updated conversation history...{COLOR_RESET}")
 
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=conversation_history,
             tools=function_schemas,
             tool_choice="auto"
@@ -76,7 +91,31 @@ async def call_openai():
         if get_debug_mode():
             print(f"{COLOR_CYAN}[🤖 OPENAI RESPONSE] {COLOR_BLUE}{assistant_message.content}{COLOR_RESET}")
 
-        # ✅ Check if OpenAI requests tool calls
+        # ✅ Step 2: If OpenAI is unsure, **force memory retrieval** before continuing
+        uncertainty_phrases = ["i don't know", "i'm not sure", "i can't remember", "uncertain", "unknown", "no idea"]
+        
+        if any(phrase in (assistant_message.content or "").lower() for phrase in uncertainty_phrases):  # ✅ FIXED LINE
+            print(f"{COLOR_RED}[🔍 MEMORY TRIGGER] OpenAI was uncertain—forcing memory search!{COLOR_RESET}")
+            memories = retrieve_memory(user_input)
+
+            if memories and isinstance(memories, list) and len(memories) > 0:
+                memory_text = "\n".join(memories[:2])  # ✅ Limit recall
+                print(f"{COLOR_GREEN}[✅ RETRIEVED MEMORY] Using: {memory_text}{COLOR_RESET}")
+                conversation_history.append({"role": "system", "content": f"Before answering, recall this stored information: {memory_text}"})
+
+                # 🔄 Retry OpenAI with memory included
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=conversation_history,
+                    tools=function_schemas,
+                    tool_choice="auto"
+                )
+                assistant_message = response.choices[0].message
+                conversation_history.append(assistant_message)
+            else:
+                print(f"{COLOR_RED}[❌ NO MEMORY FOUND ON RETRY] Even after forcing recall, nothing was found.{COLOR_RESET}")
+
+        # ✅ Check if OpenAI requests tool calls (like retrieving additional info)
         if assistant_message.tool_calls:
             tool_responses = []
 
@@ -91,7 +130,7 @@ async def call_openai():
                 if get_debug_mode():
                     print(f"{COLOR_YELLOW}[🔄 CHECKING FUNCTION] ID: {tool_call.id} | Name: {function_name}{COLOR_RESET}")
 
-                # Check if function exists
+                # ✅ Check if function exists
                 function_to_call = function_registry.get(function_name)
                 if not function_to_call:
                     print(f"{COLOR_RED}[❌ ERROR] Function not found: {function_name}{COLOR_RESET}")
@@ -101,12 +140,7 @@ async def call_openai():
                     if get_debug_mode():
                         print(f"{COLOR_YELLOW}[🚀 EXECUTING] Running {function_name}({json.dumps(function_args)}){COLOR_RESET}")
 
-                    # Special handling for debug mode toggle
-                    if function_name == "debugmode":
-                        enable = function_args.get("enable", None)
-                        function_result = set_debug_mode(enable) if enable is not None else "❌ Missing 'enable' argument."
-                    else:
-                        function_result = function_to_call(**function_args)
+                    function_result = function_to_call(**function_args)
 
                     if get_debug_mode():
                         print(f"{COLOR_GREEN}[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}{COLOR_RESET}")
@@ -124,19 +158,11 @@ async def call_openai():
                         "content": json.dumps({"error": f"Execution failed: {str(e)}"})
                     })
 
-            # 🔍 DEBUG: Check conversation history before appending
-            if get_debug_mode():
-                print(f"{COLOR_YELLOW}[📜 HISTORY BEFORE APPEND] Last message: {conversation_history[-1] if conversation_history else 'Empty'}{COLOR_RESET}")
-
-            # Store function results in history
+            # ✅ Store function results in history
             conversation_history.extend(tool_responses)
 
-            # 🔍 DEBUG: Check conversation history after appending
-            if get_debug_mode():
-                print(f"{COLOR_GREEN}[📜 HISTORY AFTER APPEND] Last added message: {tool_responses[-1] if tool_responses else 'No tool responses'}{COLOR_RESET}")
-
-            # 🚨 CALL OpenAI AGAIN TO GET FINAL RESPONSE
-            continue  # Ensures OpenAI is re-called ONLY ONCE per function execution
+            # 🔄 Retry OpenAI with function results included
+            continue  
 
         # 🛑 No more function calls → Break loop
         if get_debug_mode():
@@ -147,15 +173,9 @@ async def call_openai():
     print(f"{COLOR_CYAN}[🤖 VORTEX]: {COLOR_BLUE}{assistant_message.content}{COLOR_RESET}")
 
 
-
-
-
-
 def add_user_input(user_input):
     """Adds user input to the conversation history."""
     conversation_history.append({"role": "user", "content": user_input})
-
-
 def display_startup_message():
     """Displays the startup message for VORTEX with an ASCII banner and a highlighted acronym."""
 

@@ -20,6 +20,7 @@ import numpy as np
 import faiss
 import openai
 import json
+import sys
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 MEMORY_FILE = "memory.json"
 debug_mode = False
@@ -36,18 +37,28 @@ GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
 GOOGLE_SEARCH_CSE_ID = os.getenv("GOOGLE_SEARCH_CSE_ID")
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Add this at the top
 JSON_PATH = "powershell.json"
-
+VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
+if not os.path.exists(VORTEX_TEMP_DIR):
+    os.makedirs(VORTEX_TEMP_DIR)
+OPENAI_MODEL = "text-embedding-3-small"
 with open(JSON_PATH, "r", encoding="utf-8") as f:
     powershell_permissions = json.load(f)
 
 blacklisted = set(powershell_permissions["blacklisted"])
 ask_first = set(powershell_permissions["ask_first"])
-
+TEMP_DIR = os.path.join(os.getenv("TEMP", "/tmp"), "VORTEX")
+os.makedirs(TEMP_DIR, exist_ok=True)  # Ensure the directory exists
+TEMP_IMAGE_PATH = os.path.join(TEMP_DIR, "screenshot.png")  # Path for saving screenshots
 # Debug mode function
-def set_debug_mode(value: bool):
-    """Sets the global debug mode."""
+def set_debug_mode(enable: bool = None):
+    """Enables or disables debug mode."""
     global debug_mode
-    debug_mode = value
+    
+    if enable is None:
+        return "❌ Missing 'enable' argument. Use true or false."
+    
+    debug_mode = enable  # ✅ Update debug mode flag
+    return f"✅ Debug mode {'enabled' if enable else 'disabled'}."
 def powershell(permission: bool, command: str, returnoutput: bool = True) -> str:
     """
     Executes a PowerShell command with permission checking.
@@ -102,9 +113,6 @@ def powershell(permission: bool, command: str, returnoutput: bool = True) -> str
 def get_debug_mode():
     """Returns the current debug mode state."""
     return debug_mode
-# ---------------------------
-# 🏠 GET USER GEOLOCATION INFO
-# ---------------------------
 def get_user_info():
     """Fetches user location details based on their public IP address using ip-api.com."""
     try:
@@ -136,10 +144,6 @@ def get_user_info():
 
     except Exception as e:
         return f"Error retrieving user location: {str(e)}"
-
-# ---------------------------
-# 🕒 GET CURRENT TIME IN A TIMEZONE
-# ---------------------------
 def get_time():
     """Returns the current time in the user's timezone in multiple formats."""
     try:
@@ -170,9 +174,6 @@ def get_time():
 
     except Exception as e:
         return {"error": f"Failed to retrieve time: {str(e)}"}
-# 🔗 ------------------
-# Open a Web Link
-# --------------------
 def open_link(url: str):
     
     """Opens a specified URL in the default web browser. AI must not generate fake URLs."""
@@ -180,7 +181,7 @@ def open_link(url: str):
         webbrowser.open(url)
         return f"✅ Opened: {url}"
     return "❌ Invalid or missing URL. AI must not guess links."
-6
+
 def create_event(summary: str, start_time: str, duration: int = 60) -> dict:
     """
     Creates a Google Calendar event.
@@ -236,8 +237,6 @@ def clarify_and_launch(clarified_name: str):
         return f"✅ Launched: {clarified_name}"
     
     return f"❌ '{clarified_name}' not found in the previous list. Try again."
-import subprocess
-
 def launch_shortcut(program_name: str):
     """
     Launches a program by name, using the Start Menu shortcuts or a custom shortcut path.
@@ -257,11 +256,6 @@ def launch_shortcut(program_name: str):
             return f"❌ Failed to launch {program_name}: {str(e)}"
     
     return f"❌ No valid shortcut found for '{program_name}'."
-
-
-# 🗂️ -----------------------------
-# Get All Start Menu Shortcuts
-# -------------------------------
 START_MENU_PATH = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
 # Custom shortcut file (user-defined programs)
 CUSTOM_SHORTCUTS_FILE = "custom_shortcuts.txt"
@@ -359,10 +353,6 @@ def get_shortcuts():
                 shortcut_paths.append(shortcut_name)
 
     return shortcut_paths  # Only return names, not paths
-
-# ---------------------------
-# 📅 LIST UPCOMING EVENTS FUNCTION
-# ---------------------------
 def list_events(max_results=10, time_min=None, time_max=None, order_by="startTime"):
     """
     Retrieves a list of upcoming events from Google Calendar.
@@ -549,27 +539,6 @@ import base64
 import requests
 import os
 import tempfile
-
-VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
-
-# Ensure the VORTEX directory exists
-if not os.path.exists(VORTEX_TEMP_DIR):
-    os.makedirs(VORTEX_TEMP_DIR)
-
-
-import os
-import webbrowser
-import requests
-
-import os
-import webbrowser
-import requests
-
-import os
-import webbrowser
-import requests
-import openai
-
 def generate_image(prompt: str, save_path: str = None):
     """Generates an image using DALL-E and saves it or displays it."""
     try:
@@ -681,7 +650,6 @@ if not os.path.exists(VORTEX_TEMP_DIR):
     os.makedirs(VORTEX_TEMP_DIR)
 import requests
 from datetime import datetime, timedelta
-
 def get_weather_forecast(latitude, longitude, forecast_mode, timezone="auto"):
     """
     Fetches a weather forecast from the Open-Meteo API.
@@ -731,8 +699,6 @@ def get_weather_forecast(latitude, longitude, forecast_mode, timezone="auto"):
 
     except requests.exceptions.RequestException as e:
         return f"❌ Error fetching weather data: {e}"
-
-
 def format_hourly_forecast(data):
     """
     Formats the hourly weather forecast for today.
@@ -761,8 +727,6 @@ def format_hourly_forecast(data):
 
     except KeyError:
         return "❌ Error parsing hourly forecast data."
-
-
 def format_daily_forecast(data):
     """
     Formats the daily weather forecast for a week.
@@ -790,8 +754,6 @@ def format_daily_forecast(data):
 
     except KeyError:
         return "❌ Error parsing daily forecast data."
-
-
 def interpret_weather_code(code):
     """
     Converts WMO weather codes into human-readable descriptions.
@@ -826,115 +788,62 @@ def interpret_weather_code(code):
         99: "Severe Thunderstorm ⛈🔥"
     }
     return weather_conditions.get(code, "Unknown Weather 🤷‍♂️")
-
-
 def analyze_image(image_path: str = None):
     """
-    Analyzes an image using GPT-4o's vision capabilities.
-    If no path is provided, it captures a screenshot.
-
+    Analyzes an image using GPT-4o's vision capabilities. If no path is provided, takes a screenshot instead.
+    
     Parameters:
-    - image_path (str, optional): The file path of the image to analyze. If None, takes a screenshot.
-
+    - image_path (str, optional): Path to the image file. If None, a screenshot is taken.
+    
     Returns:
-    - dict: Description of the analyzed image.
+    - str: Description of the image or an error message.
     """
     try:
         if not image_path:
-            # Take a screenshot
-            screenshot_path = os.path.join(VORTEX_TEMP_DIR, "screenshot.png")
+            # Take a screenshot if no path is provided
+            if get_debug_mode():
+                print("[📸 IMAGE DEBUG] No image path provided. Taking a screenshot...")
+
             screenshot = pyautogui.screenshot()
-            screenshot.save(screenshot_path)
-            image_path = screenshot_path
+            screenshot.save(TEMP_IMAGE_PATH)
+            image_path = TEMP_IMAGE_PATH
 
+        # Check if the file exists
         if not os.path.exists(image_path):
-            return {"error": "❌ Image file not found."}
+            return f"❌ Error: The image file '{image_path}' does not exist."
 
-        # Convert image to base64
+        if get_debug_mode():
+            print(f"[📊 IMAGE DEBUG] Analyzing image: {image_path}")
+
+        # Open the image file
         with open(image_path, "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode("utf-8")
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": "Describe the contents of this image."}],
+                images=[{"image": image_file.read()}]  # Read image data
+            )
 
-        # Call OpenAI's GPT-4o vision API
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Describe the image in detail."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "What do you see in this image?"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-                ]}
-            ]
-        )
-        
-        description = response.choices[0].message.content
-        return {"message": "✅ Image analyzed successfully!", "description": description}
+        # Extract response
+        analysis_result = response["choices"][0]["message"]["content"]
+
+        if get_debug_mode():
+            print(f"[✅ IMAGE DEBUG] Analysis result: {analysis_result}")
+
+        return analysis_result
 
     except Exception as e:
-        return {"error": f"❌ Error analyzing image: {e}"}
-MEMORY_FILE = "memory.json"
-
-def retrieve_memory(query, category=None):
-    """Finds the most relevant stored memory for a given query, optionally filtered by category."""
-    try:
-        # Generate embedding for query
-        response = openai.Embedding.create(input=query, model="text-embedding-3-small")
-        query_embedding = np.array(response["data"][0]["embedding"]).astype("float32").reshape(1, -1)
-
-        # Load memory
-        try:
-            with open(MEMORY_FILE, "r") as f:
-                memory_data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return "🤖 No memory stored yet."
-
-        if not memory_data:
-            return "🤖 No memory stored yet."
-
-        # Search in a specific category or all categories
-        categories_to_search = [category] if category else memory_data.keys()
-
-        best_match = None
-        highest_similarity = 0.0
-
-        for cat in categories_to_search:
-            if not memory_data.get(cat):
-                continue
-
-            # Prepare FAISS index before searching
-            embeddings = np.array([entry["embedding"] for entry in memory_data[cat]]).astype("float32")
-            if len(embeddings) == 0:
-                continue  # Skip empty category
-
-            index = faiss.IndexFlatL2(len(query_embedding[0]))  # Define the FAISS index
-            index.add(embeddings)  # Add all embeddings
-
-            D, I = index.search(query_embedding, 1)  # Search for closest match
-            similarity_score = 1 - D[0][0]
-
-            # Prevent negative similarity scores
-            similarity_score = max(0, similarity_score)
-
-            if similarity_score > highest_similarity:
-                highest_similarity = similarity_score
-                best_match = memory_data[cat][I[0][0]]["text"]
-
-        if highest_similarity > 0.7:
-            return f"🧠 Retrieved from memory: {best_match} (Score: {highest_similarity:.2f})"
-        else:
-            return "🤖 No relevant memory found."
-
-    except Exception as e:
-        return f"❌ Error retrieving memory: {e}"
-
-def summarize_category(category_name):
-    """Merges similar memories within a category to remove redundancy."""
+        if get_debug_mode():
+            print(f"[❌ IMAGE DEBUG] Error occurred: {str(e)}")
+        return f"❌ Error analyzing image: {str(e)}"
+    
+def summarize_category(category_name: str):
     try:
         # Load stored memory
-        try:
-            with open(MEMORY_FILE, "r") as f:
-                memory_data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+        if not os.path.exists(MEMORY_FILE):
             return "🤖 No memory stored yet."
+
+        with open(MEMORY_FILE, "r") as f:
+            memory_data = json.load(f)
 
         if category_name not in memory_data or not memory_data[category_name]:
             return f"🤖 No data found in category '{category_name}'."
@@ -965,6 +874,180 @@ def summarize_category(category_name):
     except Exception as e:
         return f"❌ Error summarizing category: {e}"
 
+def generate_embedding(text): # helper function
+    """Generates an embedding for the given text using OpenAI's embedding model."""
+    try:
+        response = openai.embeddings.create(
+            model="text-embedding-3-small",  # ✅ Uses OpenAI embeddings
+            input=[text],
+            encoding_format="float"
+        )
+        return np.array(response.data[0].embedding).astype("float32")  # Convert to NumPy array
+    except Exception as e:
+        print(f"[❌ EMBEDDING ERROR] {str(e)}")
+        return None  # Return None if embedding fails
+
+def retrieve_memory(query: str):
+    """Finds relevant memories using keyword matching and FAISS similarity search."""
+    
+    # ✅ Load memory data
+    if not os.path.exists(MEMORY_FILE):
+        print("[❌ MEMORY FILE MISSING] No memories.json found.")
+        return []
+
+    with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+        memory_data = json.load(f)
+
+    if not memory_data:
+        print("[❌ EMPTY MEMORY FILE] No memories stored.")
+        return []
+
+    query = query.lower().strip()
+    results = []
+
+    print(f"[🔍 MEMORY DEBUG] Query: {query}")
+
+    # ✅ Step 1: Try Direct Keyword Search First (Improved)
+    for category, entries in memory_data.items():
+        for entry in entries:
+            memory_text = entry["text"].lower()
+            if query in memory_text or any(word in memory_text for word in query.split()):
+                print(f"[✅ KEYWORD MATCH] Found in category '{category}': {entry['text']}")
+                results.append(entry["text"])
+
+    if results:
+        return results  # ✅ Return early if keyword matches are found
+
+    # ✅ Step 2: Use Embeddings if No Keyword Match
+    print("[🔍 MEMORY DEBUG] No direct keyword match. Trying embeddings...")
+
+    query_embedding = generate_embedding(query)
+
+    if query_embedding is None:
+        print("[❌ EMBEDDING ERROR] Failed to generate query embedding.")
+        return []
+
+    for category, entries in memory_data.items():
+        embeddings = np.array([entry["embedding"] for entry in entries]).astype("float32")
+
+        if embeddings.size > 0:
+            index = faiss.IndexFlatL2(len(query_embedding))
+            index.add(embeddings)
+            D, I = index.search(np.array([query_embedding], dtype="float32"), 3)
+
+            for score, idx in zip(1 - D[0], I[0]):  # Convert L2 distance to similarity
+                if score > 0.7:
+                    print(f"[✅ EMBEDDING MATCH] Found in '{category}' with score {score}: {entries[idx]['text']}")
+                    results.append(entries[idx]['text'])
+
+    if results:
+        return results
+
+    print("[❌ MEMORY DEBUG] No relevant memories found.")
+    return []
+
+def shutdown_vortex():
+    print("[🛑 VORTEX SHUTDOWN] Exiting program...")
+    sys.exit(0)  # Exit the program
+def store_memory(text: str):
+    """Stores a fact in memory using vector embeddings and FAISS for retrieval."""
+    try:
+        # ✅ Generate an embedding
+        response = openai.embeddings.create(model=OPENAI_MODEL, input=[text], encoding_format="float")
+        embedding = np.array(response.data[0].embedding, dtype="float32").tolist()
+
+        # ✅ Load existing memory file or create a new one
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                memory_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            memory_data = {}
+
+        # ✅ Assign to "general" category if no category system is defined
+        category = "general"
+        if category not in memory_data:
+            memory_data[category] = []
+
+        # 🔍 **Check for Similar Memories Before Adding a New One**
+        index = faiss.IndexFlatL2(len(embedding))
+        if memory_data[category]:
+            embeddings = np.array([entry["embedding"] for entry in memory_data[category]]).astype("float32")
+            index.add(embeddings)
+
+            query_embedding = np.array(embedding).astype("float32").reshape(1, -1)
+            D, I = index.search(query_embedding, 1)  # Get the closest match
+
+            similarity_score = 1 - D[0][0]
+            if similarity_score > 0.75:  # **If it's over 75% similar, update instead**
+                memory_data[category][I[0][0]]["text"] = text
+                memory_data[category][I[0][0]]["embedding"] = embedding
+
+                with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+                    json.dump(memory_data, f, indent=4)
+
+                return f"✅ Updated existing memory: {text} (Similarity Score: {similarity_score:.2f})"
+
+        # **Otherwise, store as a new memory**
+        memory_data[category].append({"text": text, "embedding": embedding})
+
+        # ✅ Save memory file
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(memory_data, f, indent=4)
+
+        return f"✅ Stored new memory: {text}"
+
+    except Exception as e:
+        if get_debug_mode():
+            print(f"[❌ MEMORY ERROR] {str(e)}")
+        return f"❌ Error storing memory: {str(e)}"
+def delete_memory(query: str):
+    """Deletes a specific memory entry or an entire category."""
+    try:
+        # Load memory
+        if not os.path.exists(MEMORY_FILE):
+            return "📁 No memory file found."
+
+        with open(MEMORY_FILE, "r") as f:
+            memory_data = json.load(f)
+
+        # Check if the query is an entire category
+        if query in memory_data:
+            del memory_data[query]
+            with open(MEMORY_FILE, "w") as f:
+                json.dump(memory_data, f, indent=4)
+            return f"🗑️ Deleted entire category '{query}'."
+
+        # Otherwise, search for the specific entry
+        deleted = False
+        for category in memory_data.keys():
+            memory_data[category] = [entry for entry in memory_data[category] if entry["text"] != query]
+            if len(memory_data[category]) < len(memory_data.get(category, [])):
+                deleted = True
+
+        if not deleted:
+            return f"🤷 No matching memory found for '{query}'."
+
+        # Save updated memory
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory_data, f, indent=4)
+        return f"✅ Deleted memory entry: {query}"
+
+    except Exception as e:
+        return f"❌ Error deleting memory: {e}"
+def list_memory_categories():
+    """Lists all available memory categories."""
+    try:
+        if not os.path.exists(MEMORY_FILE):
+            return "📁 No memories found."
+
+        with open(MEMORY_FILE, "r") as f:
+            memory_data = json.load(f)
+
+        categories = list(memory_data.keys())
+        return categories if categories else "📂 No categories available."
+
+    except Exception as e:
+        return f"❌ Error listing memory categories: {e}"
 def categorize_memory(text):
     """Uses GPT to dynamically determine a category for a memory entry."""
     try:
@@ -980,17 +1063,17 @@ def categorize_memory(text):
         return category
     except Exception:
         return "general"  # Explicitly return "general" if categorization fails
-
-
-# ---------------------------
-# 🔗 FUNCTION REGISTRY FOR OpenAI FUNCTION CALLING
-# ---------------------------
 function_registry = {
+    "store_memory": store_memory,
+    "retrieve_memory": retrieve_memory,
+    "delete_memory": delete_memory,
+    "list_memory_categories": list_memory_categories,
     "powershell": powershell,
     "open_link": open_link,
     "get_shortcut_path": get_shortcut_path,
     "get_shortcuts": get_shortcuts,
     "clarify_and_launch": clarify_and_launch,
+    "shutdown_vortex": shutdown_vortex,
     "launch_shortcut": launch_shortcut,
     "get_weather_forecast": get_weather_forecast,
     "get_user_info": get_user_info,  # based on IP address //todo see if i can get all aplicapable info from users computer
@@ -1007,6 +1090,81 @@ function_registry = {
 }
 
 function_schemas = [
+    {
+    "type": "function",
+    "function": {
+        "name": "shutdown_vortex",
+        "description": "Shuts down the VORTEX AI system immediately.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    }
+},
+        {
+        "type": "function",
+        "function": {
+            "name": "store_memory",
+            "description": "Stores a memory.  If a similar memory already exists, it will be updated instead.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The memory to be stored, e.g., 'John's birthday is on July 5th'."
+                    }
+                },
+                "required": ["text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "retrieve_memory",
+            "description": "Retrieves memory entries related to a given topic obtained from list_memory_categories",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query to find stored memories, e.g., 'John's birthday'."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_memory",
+            "description": "Deletes a specific stored memory or clears an entire category.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The memory or category to be deleted, e.g., 'John's birthday' or 'personal'."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_memory_categories",
+            "description": "Lists all available memory categories.  this should almost always be called before using retrieve_memory().  and retrieve_memory() should generaly be called before telling the user that VORTEX doesnt know something",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
     {
     "type": "function",
     "function": {
@@ -1041,7 +1199,7 @@ function_schemas = [
         "type": "function",
         "function": {
             "name": "youtube_search",
-            "description": "Searches YouTube for a specific query and opens the results in a browser.",
+            "description": "Searches YouTube for a specific query and opens the results in a browser.  IF THE USER SAID WATCH MINECRAFT, THEY MEANT LAUNCH MINECRAFT",
             "parameters": {
                 "type": "object",
                 "properties": {
