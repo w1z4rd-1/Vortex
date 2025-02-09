@@ -4,6 +4,7 @@ from auth import authorize
 from googleapiclient.discovery import build
 import subprocess
 import os
+import importlib
 import tempfile
 import glob
 import ctypes
@@ -21,6 +22,10 @@ import faiss
 import openai
 import json
 import sys
+import time
+import openai
+import asyncio
+import capabilities
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 MEMORY_FILE = "memory.json"
 debug_mode = False
@@ -33,6 +38,8 @@ COLOR_RESET = "\033[0m"
 COLOR_YELLOW = "\033[33m"
 COLOR_CYAN = "\033[96m"
 load_dotenv()
+registry = capabilities.get_function_registry()
+schemas = capabilities.get_function_schemas()
 GOOGLE_SEARCH_KEY = os.getenv("GOOGLE_SEARCH_KEY")
 GOOGLE_SEARCH_CSE_ID = os.getenv("GOOGLE_SEARCH_CSE_ID")
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Add this at the top
@@ -50,8 +57,83 @@ TEMP_DIR = os.path.join(os.getenv("TEMP", "/tmp"), "VORTEX")
 os.makedirs(TEMP_DIR, exist_ok=True)  # Ensure the directory exists
 TEMP_IMAGE_PATH = os.path.join(TEMP_DIR, "screenshot.png")  # Path for saving screenshots
 # Debug mode function
+ALLOWED_FILES = [
+    "VORTEX.py", "boring.py", "functions.py", "voice.py", "auth.py", "build.py"
+]
+CAPABILITIES_FILE = "capabilities.py"
+def retrieve_project_memory(query: str):
+    """Finds relevant memory related to ongoing projects."""
+    project_memories = retrieve_memory(query) or []
+    created_functions = retrieve_memory("created functions") or []
+    return project_memories + created_functions  # ✅ Merge both for better context
+
+
+import openai
+
+import openai
+
+
+
+async def add_new_capability(function_name: str):
+    """Dynamically generates and registers a new function based on user request."""
+
+    print(f"[🛠 GENERATING FUNCTION] Creating new capability: '{function_name}'...")
+
+    try:
+        # ✅ Use OpenAI API correctly
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": f"Write a Python function named '{function_name}' that adds two numbers together. "
+                                                  "It should take two parameters and return the sum. "
+                                                  "Format it as a standalone Python function without any explanations or additional text."}
+                ],
+                timeout=15
+            ),
+            timeout=20
+        )
+
+        # ✅ Correct way to extract content from the response
+        function_code = response.choices[0].message.content.strip()
+
+        if not function_code.startswith("def"):
+            print(f"[❌ ERROR] OpenAI returned invalid function code:\n{function_code}")
+            return f"❌ Failed to generate a valid function: {function_code}"
+
+        # ✅ Save function to capabilities.py
+        with open("capabilities.py", "a") as f:
+            f.write(f"\n{function_code}\n")
+        
+        print(f"[✅ FUNCTION ADDED] {function_name} successfully created and saved.")
+        return f"✅ New capability '{function_name}' has been added!"
+
+    except Exception as e:
+        print(f"[❌ FUNCTION ERROR] {e}")
+        return f"❌ Failed to create new capability: {e}"
+def restart_vortex():
+    """Restarts VORTEX to apply new capabilities and reload memory."""
+    print("[🔄 RESTARTING VORTEX...]")
+
+    # ✅ Give the user time to see the restart message
+    time.sleep(2)
+
+    # ✅ Restart the Python process
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
+def read_vortex_code(filename: str):
+    """Reads and returns the contents of a VORTEX source file."""
+    if filename not in ALLOWED_FILES:
+        return f"❌ Access Denied: VORTEX is not allowed to read '{filename}'."
+
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"❌ Error reading {filename}: {e}"
 def set_debug_mode(enable: bool = None):
     """Enables or disables debug mode."""
+    print("FUNCTION RAN")
     global debug_mode
     
     if enable is None:
@@ -181,7 +263,6 @@ def open_link(url: str):
         webbrowser.open(url)
         return f"✅ Opened: {url}"
     return "❌ Invalid or missing URL. AI must not guess links."
-
 def create_event(summary: str, start_time: str, duration: int = 60) -> dict:
     """
     Creates a Google Calendar event.
@@ -904,22 +985,24 @@ def retrieve_memory(query: str):
 
     query = query.lower().strip()
     results = []
-
-    print(f"[🔍 MEMORY DEBUG] Query: {query}")
+    if get_debug_mode():
+        print(f"[🔍 MEMORY DEBUG] Query: {query}")
 
     # ✅ Step 1: Try Direct Keyword Search First (Improved)
     for category, entries in memory_data.items():
         for entry in entries:
             memory_text = entry["text"].lower()
             if query in memory_text or any(word in memory_text for word in query.split()):
-                print(f"[✅ KEYWORD MATCH] Found in category '{category}': {entry['text']}")
-                results.append(entry["text"])
+                if get_debug_mode():
+                    print(f"[✅ KEYWORD MATCH] Found in category '{category}': {entry['text']}")
+                    results.append(entry["text"])
 
     if results:
         return results  # ✅ Return early if keyword matches are found
 
     # ✅ Step 2: Use Embeddings if No Keyword Match
-    print("[🔍 MEMORY DEBUG] No direct keyword match. Trying embeddings...")
+    if get_debug_mode():
+        print("[🔍 MEMORY DEBUG] No direct keyword match. Trying embeddings...")
 
     query_embedding = generate_embedding(query)
 
@@ -942,8 +1025,8 @@ def retrieve_memory(query: str):
 
     if results:
         return results
-
-    print("[❌ MEMORY DEBUG] No relevant memories found.")
+    if get_debug_mode():
+        print("[❌ MEMORY DEBUG] No relevant memories found.")
     return []
 
 def shutdown_vortex():
@@ -1001,279 +1084,129 @@ def store_memory(text: str):
             print(f"[❌ MEMORY ERROR] {str(e)}")
         return f"❌ Error storing memory: {str(e)}"
 def delete_memory(query: str):
-    """Deletes a specific memory entry or an entire category."""
-    try:
-        # Load memory
-        if not os.path.exists(MEMORY_FILE):
-            return "📁 No memory file found."
+    """Deletes a specific stored memory or clears an entire category."""
+    with open(MEMORY_FILE, "r+") as f:
+        memory_data = json.load(f)
 
-        with open(MEMORY_FILE, "r") as f:
-            memory_data = json.load(f)
-
-        # Check if the query is an entire category
-        if query in memory_data:
-            del memory_data[query]
-            with open(MEMORY_FILE, "w") as f:
-                json.dump(memory_data, f, indent=4)
-            return f"🗑️ Deleted entire category '{query}'."
-
-        # Otherwise, search for the specific entry
-        deleted = False
-        for category in memory_data.keys():
-            memory_data[category] = [entry for entry in memory_data[category] if entry["text"] != query]
-            if len(memory_data[category]) < len(memory_data.get(category, [])):
+    # ✅ Allow partial matches instead of requiring an exact match
+    deleted = False
+    for category, entries in memory_data.items():
+        for i, entry in enumerate(entries):
+            if query.lower() in entry["text"].lower():  # ✅ Check for partial match
+                del memory_data[category][i]
                 deleted = True
+                break
 
-        if not deleted:
-            return f"🤷 No matching memory found for '{query}'."
-
-        # Save updated memory
+    if deleted:
         with open(MEMORY_FILE, "w") as f:
             json.dump(memory_data, f, indent=4)
-        return f"✅ Deleted memory entry: {query}"
+        return f"✅ Memory related to '{query}' has been deleted."
+    else:
+        return f"🤷 No matching memory found for '{query}'."
 
-    except Exception as e:
-        return f"❌ Error deleting memory: {e}"
 def list_memory_categories():
-    """Lists all available memory categories."""
-    try:
-        if not os.path.exists(MEMORY_FILE):
-            return "📁 No memories found."
+    """Lists all available memory categories from the memory file."""
+    if not os.path.exists(MEMORY_FILE):
+        print("[❌ MEMORY FILE MISSING] No memories.json found.")
+        return []
 
-        with open(MEMORY_FILE, "r") as f:
+    try:
+        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
             memory_data = json.load(f)
 
         categories = list(memory_data.keys())
-        return categories if categories else "📂 No categories available."
+        if not categories:
+            print("[📂 EMPTY MEMORY] No categories available.")
+            return []
+        
+        print(f"[📜 MEMORY CATEGORIES] Available categories: {categories}")
+        return categories
 
     except Exception as e:
-        return f"❌ Error listing memory categories: {e}"
+        print(f"[❌ ERROR] Failed to list memory categories: {e}")
+        return []
+
 def categorize_memory(text):
-    """Uses GPT to dynamically determine a category for a memory entry."""
+    """Uses GPT-4o to determine a category for a memory entry with a strict one-word rule."""
+    
+    categories = list_memory_categories()  # ✅ Load existing categories
+    
+    system_prompt = (
+        f"Please categorize this fact. "
+        f"Only respond with **one** single word, the category name. "
+        f"Current categories: {', '.join(categories) if categories else 'None'}. "
+        f"If none fit, respond with a new category name."
+    )
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are categorizing stored knowledge. "
-                 "Assign a single short category name that best describes the input."},
-                {"role": "user", "content": f"Categorize this: {text}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
             ]
         )
-        category = response["choices"][0]["message"]["content"].strip().lower()
-        return category
-    except Exception:
-        return "general"  # Explicitly return "general" if categorization fails
-function_registry = {
-    "store_memory": store_memory,
-    "retrieve_memory": retrieve_memory,
-    "delete_memory": delete_memory,
-    "list_memory_categories": list_memory_categories,
-    "powershell": powershell,
-    "open_link": open_link,
-    "get_shortcut_path": get_shortcut_path,
-    "get_shortcuts": get_shortcuts,
-    "clarify_and_launch": clarify_and_launch,
-    "shutdown_vortex": shutdown_vortex,
-    "launch_shortcut": launch_shortcut,
-    "get_weather_forecast": get_weather_forecast,
-    "get_user_info": get_user_info,  # based on IP address //todo see if i can get all aplicapable info from users computer
-    "get_time": get_time,
-    "create_event": create_event,  # use my Google Calendar
-    "list_events": list_events,
-    "display_markdown": display_markdown,
-    "search_query": search_query,  # use Wikipedia and Google to find info
-    "debugmode": set_debug_mode,
-    "generate_image": generate_image,
-    "analyze_image": analyze_image,
-    "modrinth_search": modrinth_search,
-    "youtube_search": youtube_search
-}
 
-function_schemas = [
-    {
+        category = response.choices[0].message["content"].strip().lower()
+
+        # ✅ Ensure it's only **one word** (remove extra spaces/newlines)
+        if " " in category or len(category) == 0:
+            print(f"[⚠️ WARNING] Invalid category received: '{category}', defaulting to 'general'.")
+            return "general"
+
+        print(f"[📂 CATEGORY ASSIGNED] '{text}' → '{category}'")
+        return category
+
+    except Exception as e:
+        print(f"[❌ ERROR] Failed to categorize memory: {e}")
+        return "general"  # ✅ Safe fallback category
+
+    
+capabilities.register_function_in_registry("store_memory", store_memory)
+capabilities.register_function_in_registry("retrieve_memory", retrieve_memory)
+capabilities.register_function_in_registry("delete_memory", delete_memory)
+capabilities.register_function_in_registry("list_memory_categories", list_memory_categories)
+capabilities.register_function_in_registry("powershell", powershell)
+capabilities.register_function_in_registry("search_query", search_query)
+capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
+capabilities.register_function_in_registry("add_new_capability", add_new_capability)
+capabilities.register_function_in_registry("restart_vortex", restart_vortex)
+capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
+capabilities.register_function_in_registry("get_weather_forecast", get_weather_forecast)
+capabilities.register_function_in_registry("youtube_search", youtube_search)
+capabilities.register_function_in_registry("modrinth_search", modrinth_search)
+capabilities.register_function_in_registry("generate_image", generate_image)
+capabilities.register_function_in_registry("clarify_and_launch", clarify_and_launch)
+capabilities.register_function_in_registry("analyze_image", analyze_image)
+capabilities.register_function_in_registry("debugmode", set_debug_mode)
+capabilities.register_function_in_registry("open_link", open_link)
+capabilities.register_function_in_registry("get_shortcuts", get_shortcuts)
+capabilities.register_function_in_registry("get_shortcut_path", get_shortcut_path)
+capabilities.register_function_in_registry("launch_shortcut", launch_shortcut)
+capabilities.register_function_in_registry("display_markdown", display_markdown)
+capabilities.register_function_in_registry("get_user_info", get_user_info)
+capabilities.register_function_in_registry("get_time", get_time)
+capabilities.register_function_in_registry("create_event", create_event)
+capabilities.register_function_in_registry("list_events", list_events)
+
+# ✅ Register Function Schemas
+capabilities.register_function_schema({
     "type": "function",
     "function": {
-        "name": "shutdown_vortex",
-        "description": "Shuts down the VORTEX AI system immediately.",
+        "name": "list_events",
+        "description": "Lists upcoming events from Google Calendar.",
         "parameters": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "max_results": {"type": "integer", "description": "Number of events to fetch."},
+                "time_min": {"type": "string", "description": "Start time filter (ISO 8601)."},
+                "time_max": {"type": "string", "description": "End time filter (ISO 8601)."}
+            },
             "required": []
         }
     }
-},
-        {
-        "type": "function",
-        "function": {
-            "name": "store_memory",
-            "description": "Stores a memory.  If a similar memory already exists, it will be updated instead.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "The memory to be stored, e.g., 'John's birthday is on July 5th'."
-                    }
-                },
-                "required": ["text"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "retrieve_memory",
-            "description": "Retrieves memory entries related to a given topic obtained from list_memory_categories",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to find stored memories, e.g., 'John's birthday'."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "delete_memory",
-            "description": "Deletes a specific stored memory or clears an entire category.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The memory or category to be deleted, e.g., 'John's birthday' or 'personal'."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_memory_categories",
-            "description": "Lists all available memory categories.  this should almost always be called before using retrieve_memory().  and retrieve_memory() should generaly be called before telling the user that VORTEX doesnt know something",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    },
-    {
-    "type": "function",
-    "function": {
-        "name": "get_weather_forecast",
-        "description": "Retrieves a weather forecast for a given location, either an hourly breakdown for today or a daily summary for a week. present it in a nice way for the user! also its unnessesary usualy to show weather from eariler in the day or week, use get_user_info if you dont know where the user is",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "latitude": {
-                    "type": "number",
-                    "description": "Geographical latitude of the location."
-                },
-                "longitude": {
-                    "type": "number",
-                    "description": "Geographical longitude of the location."
-                },
-                "forecast_mode": {
-                    "type": "string",
-                    "enum": ["hourly_today", "daily_week"],
-                    "description": "\"hourly_today\" for today's hour-by-hour breakdown, \"daily_week\" for a 7-day summary."
-                },
-                "timezone": {
-                    "type": "string",
-                    "description": "The timezone to use for formatting. Defaults to 'auto'."
-                }
-            },
-            "required": ["latitude", "longitude", "forecast_mode"]
-        }
-    }
-},
-    {
-        "type": "function",
-        "function": {
-            "name": "youtube_search",
-            "description": "Searches YouTube for a specific query and opens the results in a browser.  IF THE USER SAID WATCH MINECRAFT, THEY MEANT LAUNCH MINECRAFT",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query for YouTube."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "modrinth_search",
-            "description": "Searches Modrinth for Minecraft mods based on the given query.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query for Modrinth."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-    "type": "function",
-    "function": {
-        "name": "powershell",
-        "description": "Executes a PowerShell command with permission handling.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "permission": {
-                    "type": "boolean",
-                    "description": "Did the user explicitly give permission to run this command?"
-                },
-                "command": {
-                    "type": "string",
-                    "description": "The PowerShell command to execute. Can include arguments."
-                },
-                "returnoutput": {
-                    "type": "boolean",
-                    "description": "If true, captures and returns the command output. If false, runs the command in a new PowerShell window and checks for errors after 3 seconds.",
-                    "default": True
-                }
-            },
-            "required": ["permission", "command"]
-        }
-    }
-},
-
-    {
-    "type": "function",
-    "function": {
-        "name": "youtube_search",
-        "description": "Searches YouTube for a specific query and opens the results in a browser.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query for YouTube."
-                }
-            },
-            "required": ["query"]
-        }
-    }
-},
-{
+})
+capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "modrinth_search",
@@ -1289,29 +1222,9 @@ function_schemas = [
             "required": ["query"]
         }
     }
-},
-{
-    "type": "function",
-    "function": {
-        "name": "generate_image",
-        "description": "Generates an image using DALL-E based on a given prompt. Optionally, specify a file path to save the image.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "prompt": {
-                    "type": "string",
-                    "description": "A detailed prompt describing the image to generate."
-                },
-                "save_path": {
-                    "type": "string",
-                    "description": "Optional. The file path to save the generated image. If not specified, it will be saved in the %temp%/VORTEX directory."
-                }
-            },
-            "required": ["prompt"]
-        }
-    }
-},
-{
+})
+
+capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "clarify_and_launch",
@@ -1327,8 +1240,9 @@ function_schemas = [
             "required": ["clarified_name"]
         }
     }
-},
-{
+})
+
+capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "analyze_image",
@@ -1344,43 +1258,9 @@ function_schemas = [
             "required": []
         }
     }
-},
+})
 
-    {
-    "type": "function",
-    "function": {
-        "name": "debugmode",
-        "description": "Enables or disables debug mode, when debug mode is on, additional information about what tools/functions were used as well as what they returned and what arguments were used gets printed accepts true/false ONLY",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "enable": {
-                    "type": "boolean",
-                    "description": "Set to true to enable debug mode, false to disable it."
-                }
-            },
-            "required": ["enable"]
-        }
-    }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "open_link",
-            "description": "Opens a URL in the default web browser. AI must not guess URLs.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The full URL to open (must start with http:// or https://)."
-                    }
-                },
-                "required": ["url"]
-            }
-        }
-    },
-    {
+capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "get_shortcuts",
@@ -1391,8 +1271,9 @@ function_schemas = [
             "required": []
         }
     }
-},
-{
+})
+
+capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "get_shortcut_path",
@@ -1408,131 +1289,275 @@ function_schemas = [
             "required": ["shortcut_name"]
         }
     }
-},
+})
 
-    {
-        "type": "function",
-        "function": {
-            "name": "launch_shortcut",
-            "description": "Lauches a program based on whatever name u got from get_shortcuts",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "program_name": {
-                        "type": "string",
-                        "description": "The name of the program to launch."
-                    }
-                },
-                "required": ["program_name"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "display_markdown",
-            "description": "displays markdown to the user, it will open their browser to do so.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "The markdown-formatted text to display."
-                    }
-                },
-                "required": ["content"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_user_info",
-            "description": "Retrieves user's geolocation details.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_time",
-            "description": "Gets the current time in the user's timezone in ISO 8601 format.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_event",
-            "description": "Creates an event in Google Calendar.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "description": "Event title."
-                    },
-                    "start_time": {
-                        "type": "string",
-                        "description": "ISO 8601 format start time."
-                    },
-                    "duration": {
-                        "type": "integer",
-                        "description": "Duration in minutes."
-                    }
-                },
-                "required": ["summary", "start_time"]
-            }
-        }
-    },
-    {
+capabilities.register_function_schema({
     "type": "function",
     "function": {
-        "name": "search_query",
-        "description": "Searches for a specific wikipidia page, if none exist, then we google it",
+        "name": "launch_shortcut",
+        "description": "Launches a program based on a shortcut name retrieved from get_shortcuts.",
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {
+                "program_name": {
                     "type": "string",
-                    "description": "The search query to look up."
+                    "description": "The name of the program to launch."
                 }
+            },
+            "required": ["program_name"]
+        }
+    }
+})
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "store_memory",
+        "description": "Stores a memory. If a similar memory already exists, it will be updated instead.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "The memory content to store."}
+            },
+            "required": ["text"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "retrieve_memory",
+        "description": "Retrieves memory entries related to a given topic.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query to find stored memories."}
             },
             "required": ["query"]
         }
     }
-},
-    {
-        "type": "function",
-        "function": {
-            "name": "list_events",
-            "description": "Lists upcoming events from Google Calendar.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "max_results": {
-                        "type": "integer",
-                        "description": "Number of events to fetch."
-                    },
-                    "time_min": {
-                        "type": "string",
-                        "description": "Start time filter (ISO 8601)."
-                    },
-                    "time_max": {
-                        "type": "string",
-                        "description": "End time filter (ISO 8601)."
-                    }
-                },
-                "required": []
-            }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "delete_memory",
+        "description": "Deletes a specific stored memory or clears an entire category.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The memory or category to be deleted."}
+            },
+            "required": ["query"]
         }
     }
-]
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "list_memory_categories",
+        "description": "Lists all available memory categories."
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "powershell",
+        "description": "Executes a PowerShell command and returns the output.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "The PowerShell command to execute."}
+            },
+            "required": ["command"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "search_query",
+        "description": "Searches the web using Wikipedia and Google for relevant information.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search term or question."}
+            },
+            "required": ["query"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "read_vortex_code",
+        "description": "Reads and returns the contents of a VORTEX source file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string", "description": "The name of the VORTEX source file to read."}
+            },
+            "required": ["filename"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "add_new_capability",
+        "description": "Creates and registers a new function dynamically when explicitly requested by the user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "function_name": {"type": "string", "description": "The name of the function to be created."}
+            },
+            "required": ["function_name"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "restart_vortex",
+        "description": "Restarts the VORTEX system to apply new capabilities and reload memory."
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "shutdown_vortex",
+        "description": "Shuts down the VORTEX AI system immediately."
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "get_weather_forecast",
+        "description": "Retrieves a weather forecast for a given location.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "latitude": {"type": "number", "description": "Geographical latitude of the location."},
+                "longitude": {"type": "number", "description": "Geographical longitude of the location."},
+                "forecast_mode": {"type": "string", "enum": ["hourly_today", "daily_week"], "description": "Forecast mode: 'hourly_today' or 'daily_week'."}
+            },
+            "required": ["latitude", "longitude", "forecast_mode"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "youtube_search",
+        "description": "Searches YouTube for a specific query and opens the results in a browser.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The search query for YouTube."}
+            },
+            "required": ["query"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "generate_image",
+        "description": "Generates an image using DALL-E based on a given prompt.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "A detailed prompt describing the image to generate."}
+            },
+            "required": ["prompt"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "debugmode",
+        "description": "Enables or disables debug mode.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "enable": {"type": "boolean", "description": "Set to true to enable debug mode, false to disable it."}
+            },
+            "required": ["enable"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "display_markdown",
+        "description": "Displays markdown-formatted text in a browser.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "The markdown-formatted text to display."}
+            },
+            "required": ["content"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "get_user_info",
+        "description": "Retrieves the user's geolocation details."
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "get_time",
+        "description": "Gets the current time in the user's timezone in ISO 8601 format."
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "create_event",
+        "description": "Creates an event in Google Calendar.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Event title."},
+                "start_time": {"type": "string", "description": "ISO 8601 format start time."},
+                "duration": {"type": "integer", "description": "Duration in minutes."}
+            },
+            "required": ["summary", "start_time"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "open_link",
+        "description": "Opens a URL in the default web browser.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The full URL to open (must start with http:// or https://)."}
+            },
+            "required": ["url"]
+        }
+    }
+})

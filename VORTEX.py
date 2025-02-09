@@ -3,10 +3,10 @@ import asyncio
 from voice import detect_wake_word, record_audio, transcribe_audio
 from boring import call_openai, add_user_input, display_startup_message
 import os
-os.system("cls")
+#os.system("cls")
 VORTEX_VERSION = "Alpha"
 
-os.system("cls")
+# os.system("cls")
 display_startup_message()
 async def main():
     """Main loop that waits for wake word, records audio, transcribes, and interacts with AI"""
