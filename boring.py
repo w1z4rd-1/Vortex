@@ -49,13 +49,17 @@ async def call_openai():
     memories = retrieve_memory(user_input)
 
     if memories:
-        memory_text = "\n".join(memories[:2])
+        memory_text = "\n".join(memories)  # ✅ Store ALL retrieved memories
+
         if get_debug_mode():
             print(f"[✅ MEMORY FOUND] Retrieved: {memory_text}")
-        conversation_history.append({"role": "system", "content": f"Before answering, recall this stored information: {memory_text}"})
+
+    # ✅ Append memory as SYSTEM context so OpenAI is "reminded" of it
+        conversation_history.append({"role": "system", "content": f"Before answering, remember this: {memory_text}"})
     else:
         if get_debug_mode():
             print(f"[❌ NO MEMORY FOUND] No relevant memories retrieved.")
+
 
     max_retries = 3  # ✅ Prevents infinite looping
     attempt = 0
@@ -68,8 +72,6 @@ async def call_openai():
         function_schemas = capabilities.get_function_schemas() if capabilities.get_function_schemas() else None
         tool_choice_param = "auto" if function_schemas else None
 
-        if get_debug_mode():
-            print(f"[🔍 SCHEMA DEBUG] Using function schemas: {function_schemas}")
 
         # ✅ Add timeout to prevent indefinite hanging
         try:

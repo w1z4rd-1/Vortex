@@ -72,45 +72,62 @@ import openai
 
 import openai
 
-
-
-async def add_new_capability(function_name: str):
-    """Dynamically generates and registers a new function based on user request."""
-
-    print(f"[🛠 GENERATING FUNCTION] Creating new capability: '{function_name}'...")
+def add_new_capability(function_name: str):
+    """Spawns a subprocess to build and register a new capability."""
+    script_path = os.path.join(os.getcwd(), "build_capability.py")
 
     try:
-        # ✅ Use OpenAI API correctly
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": f"Write a Python function named '{function_name}' that adds two numbers together. "
-                                                  "It should take two parameters and return the sum. "
-                                                  "Format it as a standalone Python function without any explanations or additional text."}
-                ],
-                timeout=15
-            ),
-            timeout=20
+        # ✅ Launch a separate PowerShell window to build the capability
+        subprocess.Popen(["powershell", "-NoExit", "python", script_path, function_name], shell=True)
+
+        return f"🛠 VORTEX is now building the capability '{function_name}' in a separate process..."
+    except Exception as e:
+        return f"❌ Failed to start capability builder: {str(e)}"
+
+def generate_new_function(function_name):
+    """Generates a new function using OpenAI and registers it dynamically."""
+    print(f"🛠 Generating new capability: {function_name}...")
+
+    try:
+        # ✅ Ask OpenAI to create a function
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": f"Write a Python function named '{function_name}' that performs a useful task."}
+            ]
         )
 
-        # ✅ Correct way to extract content from the response
-        function_code = response.choices[0].message.content.strip()
+        function_code = response.choices[0].message["content"].strip()
 
+        # ✅ Validate function code (ensure it starts with 'def')
         if not function_code.startswith("def"):
-            print(f"[❌ ERROR] OpenAI returned invalid function code:\n{function_code}")
-            return f"❌ Failed to generate a valid function: {function_code}"
+            print(f"❌ ERROR: OpenAI returned invalid function code:\n{function_code}")
+            return
 
-        # ✅ Save function to capabilities.py
-        with open("capabilities.py", "a") as f:
+        # ✅ Save function to `capabilities.py`
+        with open("capabilities.py", "a", encoding="utf-8") as f:
             f.write(f"\n{function_code}\n")
-        
-        print(f"[✅ FUNCTION ADDED] {function_name} successfully created and saved.")
-        return f"✅ New capability '{function_name}' has been added!"
+            f.write(f"\ncapabilities.register_function_in_registry(\"{function_name}\", {function_name})\n")
+
+        print(f"✅ Function '{function_name}' successfully added to capabilities!")
+    
+        # ✅ Reload capabilities (avoid restart)
+        import importlib
+        importlib.reload(capabilities)
+
+        print(f"🔄 Reloaded capabilities. '{function_name}' is now available!")
 
     except Exception as e:
-        print(f"[❌ FUNCTION ERROR] {e}")
-        return f"❌ Failed to create new capability: {e}"
+        print(f"❌ ERROR: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("❌ ERROR: No function name provided!")
+        sys.exit(1)
+
+    function_name = sys.argv[1]
+    generate_new_function(function_name)
+
 def restart_vortex():
     """Restarts VORTEX to apply new capabilities and reload memory."""
     print("[🔄 RESTARTING VORTEX...]")
@@ -988,14 +1005,16 @@ def retrieve_memory(query: str):
     if get_debug_mode():
         print(f"[🔍 MEMORY DEBUG] Query: {query}")
 
-    # ✅ Step 1: Try Direct Keyword Search First (Improved)
+    # ✅ Step 1: Try Direct Keyword Search (More Flexible)
     for category, entries in memory_data.items():
         for entry in entries:
             memory_text = entry["text"].lower()
+            
+            # ✅ Improve Matching: Allow Partial Matches, Ignore Word Order
             if query in memory_text or any(word in memory_text for word in query.split()):
                 if get_debug_mode():
                     print(f"[✅ KEYWORD MATCH] Found in category '{category}': {entry['text']}")
-                    results.append(entry["text"])
+                results.append(entry["text"])  # ✅ Always store, not just in debug mode
 
     if results:
         return results  # ✅ Return early if keyword matches are found
@@ -1020,11 +1039,12 @@ def retrieve_memory(query: str):
 
             for score, idx in zip(1 - D[0], I[0]):  # Convert L2 distance to similarity
                 if score > 0.7:
-                    print(f"[✅ EMBEDDING MATCH] Found in '{category}' with score {score}: {entries[idx]['text']}")
+                    if get_debug_mode():
+                        print(f"[✅ EMBEDDING MATCH] Found in '{category}' with score {score}: {entries[idx]['text']}")
                     results.append(entries[idx]['text'])
 
     if results:
-        return results
+        return results  # ✅ Ensure embeddings are actually returned
     if get_debug_mode():
         print("[❌ MEMORY DEBUG] No relevant memories found.")
     return []
