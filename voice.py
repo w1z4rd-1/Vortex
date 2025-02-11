@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import numpy as np
 import wave
@@ -7,26 +8,33 @@ import whisper
 import pvporcupine
 from pvrecorder import PvRecorder
 from dotenv import load_dotenv
-import sys
 import warnings
+
+# Import debug helper functions from your functions module.
+# These should include at least get_debug_mode() (and optionally set_debug_mode() if needed).
 from functions import set_debug_mode, get_debug_mode
 
-warnings.filterwarnings("ignore", category=UserWarning)  # Suppress FFMPEG warning
+# Suppress FFMPEG warnings (optional)
+warnings.filterwarnings("ignore", category=UserWarning)
 
-# Load environment variables
+# ------------------------------
+# Environment & API Keys
+# ------------------------------
 load_dotenv()
-# API keys and model paths
 PORCUPINE_KEY = os.getenv("PORCUPINE_ACCESS_KEY")
+MODEL_PATH = "VORTEX.ppn"  # Change this to your keyword model path if needed
 
-MODEL_PATH = "VORTEX.ppn"  # Adjust this path if needed
-
+# ------------------------------
 # ANSI Escape Codes for Colors
-COLOR_GREEN = "\033[92m"  # Debug Green
-COLOR_BLUE = "\033[94m"   # Light Blue (Normal Responses)
-COLOR_RED = "\033[91m"    # Red (Errors)
-COLOR_RESET = "\033[0m"   # Reset Color
+# ------------------------------
+COLOR_GREEN = "\033[92m"  # For success/debug messages
+COLOR_BLUE  = "\033[94m"  # For normal responses
+COLOR_RED   = "\033[91m"  # For error messages
+COLOR_RESET = "\033[0m"   # To reset terminal color
 
-# Initialize Whisper Model (Only Show Message in Debug Mode)
+# ------------------------------
+# Load Whisper Model
+# ------------------------------
 if get_debug_mode():
     print(f"{COLOR_GREEN}Loading Whisper model...{COLOR_RESET}")
 whisper_model = whisper.load_model("base")  # Change to "tiny", "small", etc. for performance
@@ -35,40 +43,58 @@ whisper_model = whisper.load_model("base")  # Change to "tiny", "small", etc. fo
 # Wake Word Detection
 # ------------------------------
 def detect_wake_word():
-    """Listens for the wake word and returns True when detected."""
-
+    """
+    Listens for the wake word using Porcupine and PvRecorder.
+    Returns True once the wake word is detected.
+    """
     if get_debug_mode():
-        print(f"{COLOR_GREEN}\nListening for wake word...{COLOR_RESET}")
-    porcupine = pvporcupine.create(access_key=PORCUPINE_KEY, keyword_paths=[MODEL_PATH])
+        print(f"{COLOR_GREEN}Listening for wake word...{COLOR_RESET}")
     
+    # Create a Porcupine instance using your access key and keyword model.
+    porcupine = pvporcupine.create(
+        access_key=PORCUPINE_KEY,
+        keyword_paths=[MODEL_PATH]
+    )
+    
+    # Create and start the recorder (device_index=-1 selects the default microphone).
     recorder = PvRecorder(device_index=-1, frame_length=porcupine.frame_length)
     recorder.start()
-
+    
+    detected = False
     try:
         while True:
+            # recorder.read() returns a list; convert it to a NumPy array of type int16.
             pcm = np.array(recorder.read(), dtype=np.int16)
             keyword_index = porcupine.process(pcm)
             if keyword_index >= 0:
-                print(f"{COLOR_GREEN}══════════════════════════════════════════{COLOR_RESET}")
-                if get_debug_mode():
-                    print(f"{COLOR_GREEN}Wake word detected! Starting transcription...{COLOR_RESET}")
-                return True
+                print(f"{COLOR_GREEN}Wake word detected!{COLOR_RESET}")
+                detected = True
+                break
+            # A short sleep prevents excessive CPU usage.
+            time.sleep(0.01)
     except KeyboardInterrupt:
-        print(f"{COLOR_RED}\n[EXIT] User terminated wake word detection.{COLOR_RESET}")
+        print(f"{COLOR_RED}[EXIT] User terminated wake word detection.{COLOR_RESET}")
         sys.exit()
-        return False
     finally:
         recorder.stop()
         porcupine.delete()
+    
+    return detected
 
 # ------------------------------
 # Speech Recording
 # ------------------------------
 def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_duration=3.0):
     """
-    Records audio after wake word detection.
-    Stops recording when silence is detected for `silence_duration` seconds.
-    Saves audio to `filename` and returns the file path.
+    Records audio from the default microphone until a period of silence is detected.
+    
+    Args:
+        filename (str): The filename to save the recorded WAV audio.
+        silence_threshold (int): The threshold for determining silence.
+        silence_duration (float): The duration (in seconds) of silence required to stop recording.
+    
+    Returns:
+        str: The filename of the saved audio file.
     """
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
@@ -76,10 +102,11 @@ def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_
     RATE = 16000
 
     if get_debug_mode():
-        print(f"{COLOR_GREEN}Listening... Speak now.{COLOR_RESET}")
-        
+        print(f"{COLOR_GREEN}Recording audio. Speak now...{COLOR_RESET}")
+
     audio = pyaudio.PyAudio()
-    stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE,
+                        input=True, frames_per_buffer=CHUNK)
 
     frames = []
     last_audio_time = time.time()
@@ -89,28 +116,28 @@ def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_
         while capturing:
             data = stream.read(CHUNK, exception_on_overflow=False)
             frames.append(data)
-
-            # Convert audio to numpy array & check volume
+            
+            # Convert the audio chunk to a NumPy array to calculate its average volume.
             audio_data = np.frombuffer(data, dtype=np.int16)
             volume = np.abs(audio_data).mean()
-
+            
+            # If volume is below the threshold for a sustained duration, stop recording.
             if volume < silence_threshold:
                 if time.time() - last_audio_time > silence_duration:
                     if get_debug_mode():
-                        print(f"{COLOR_GREEN}Silence detected. Stopping recording.{COLOR_RESET}")
+                        print(f"{COLOR_GREEN}Silence detected; stopping recording.{COLOR_RESET}")
                     capturing = False
             else:
                 last_audio_time = time.time()
-
     except KeyboardInterrupt:
-        print(f"{COLOR_RED}\n[EXIT] User interrupted recording.{COLOR_RESET}")
+        print(f"{COLOR_RED}[EXIT] User interrupted recording.{COLOR_RESET}")
         sys.exit()
     finally:
         stream.stop_stream()
         stream.close()
         audio.terminate()
 
-    # Save to WAV file
+    # Save the recorded frames to a WAV file.
     with wave.open(filename, 'wb') as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(audio.get_sample_size(FORMAT))
@@ -123,15 +150,23 @@ def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_
 # Audio Transcription
 # ------------------------------
 def transcribe_audio(audio_path):
-    """Transcribes recorded audio file using Whisper and returns the text."""
+    """
+    Transcribes the audio file at the given path using the Whisper model.
+    
+    Args:
+        audio_path (str): The path to the audio file to transcribe.
+    
+    Returns:
+        str: The transcribed text, or None if no speech was detected.
+    """
     if get_debug_mode():
-        print(f"{COLOR_GREEN}Transcribing audio...{COLOR_RESET}")
+        print(f"{COLOR_GREEN}Transcribing audio from file: {audio_path}{COLOR_RESET}")
         
     result = whisper_model.transcribe(audio_path)
     transcript = result["text"].strip()
     
     if get_debug_mode():
-        print("\n=== Transcription ===")
+        print("=== Transcription ===")
         print(transcript if transcript else "[No speech detected]")
-
+        
     return transcript if transcript else None

@@ -61,6 +61,7 @@ ALLOWED_FILES = [
     "VORTEX.py", "boring.py", "functions.py", "voice.py", "auth.py", "build.py"
 ]
 CAPABILITIES_FILE = "capabilities.py"
+
 def retrieve_project_memory(query: str):
     """Finds relevant memory related to ongoing projects."""
     project_memories = retrieve_memory(query) or []
@@ -72,18 +73,26 @@ import openai
 
 import openai
 
-def add_new_capability(function_name: str):
-    """Spawns a subprocess to build and register a new capability."""
-    script_path = os.path.join(os.getcwd(), "build_capability.py")
-
+def add_new_capability(function_name):
+    """Starts a separate process to build a new capability."""
     try:
-        # ✅ Launch a separate PowerShell window to build the capability
-        subprocess.Popen(["powershell", "-NoExit", "python", script_path, function_name], shell=True)
+        print(f"[🛠 STARTING BUILD] Creating '{function_name}' capability in a new process...")
+
+        python_executable = sys.executable  # ✅ Get the correct Python path
+        build_script = os.path.join(os.getcwd(), "build_capability.py")
+
+        # ✅ Ensure the file exists
+        if not os.path.exists(build_script):
+            return f"❌ ERROR: Missing {build_script}. Cannot build capability."
+
+        # ✅ Run PowerShell without mangling arguments
+        subprocess.Popen([python_executable, build_script, function_name], creationflags=subprocess.CREATE_NEW_CONSOLE)
 
         return f"🛠 VORTEX is now building the capability '{function_name}' in a separate process..."
+    
     except Exception as e:
-        return f"❌ Failed to start capability builder: {str(e)}"
-
+        return f"❌ Failed to start capability building process: {str(e)}"
+    
 def generate_new_function(function_name):
     """Generates a new function using OpenAI and registers it dynamically."""
     print(f"🛠 Generating new capability: {function_name}...")
@@ -137,6 +146,56 @@ def restart_vortex():
 
     # ✅ Restart the Python process
     os.execl(sys.executable, sys.executable, *sys.argv)
+import os
+import requests
+import xml.etree.ElementTree as ET
+from dotenv import load_dotenv
+
+# Load API Key
+load_dotenv()
+WOLFRAM_APP_ID = os.getenv("WOLFRAM_APP_ID")
+
+def query_wolfram_alpha(query: str) -> dict:
+    """
+    Queries Wolfram Alpha's Full Results API and returns formatted results.
+
+    Parameters:
+    - query (str): The question or mathematical expression to solve.
+
+    Returns:
+    - dict: Structured response with results from Wolfram Alpha.
+    """
+    if not WOLFRAM_APP_ID:
+        return {"error": "Wolfram Alpha API key is missing."}
+
+    url = "http://api.wolframalpha.com/v2/query"
+    params = {
+        "input": query,
+        "format": "plaintext",
+        "output": "XML",
+        "appid": WOLFRAM_APP_ID
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        root = ET.fromstring(response.content)
+
+        results = []
+
+        for pod in root.findall(".//pod"):
+            title = pod.get("title")
+            plaintext = pod.find(".//plaintext")
+            if plaintext is not None and plaintext.text:
+                results.append(f"**{title}**: {plaintext.text}")
+
+        if not results:
+            return {"error": "No relevant information found."}
+
+        return {"result": "\n".join(results)}
+
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API request failed: {str(e)}"}
 
 def read_vortex_code(filename: str):
     """Reads and returns the contents of a VORTEX source file."""
@@ -158,57 +217,53 @@ def set_debug_mode(enable: bool = None):
     
     debug_mode = enable  # ✅ Update debug mode flag
     return f"✅ Debug mode {'enabled' if enable else 'disabled'}."
-def powershell(permission: bool, command: str, returnoutput: bool = True) -> str:
+def powershell(permission: bool = False, command: str = "", returnoutput: bool = True) -> str:
     """
-    Executes a PowerShell command with permission checking.
+    Executes a PowerShell command with permission handling.
     
     Parameters:
-    - permission (bool): Did the user explicitly give permission to run this command?
-    - command (str): The PowerShell command to execute (may include arguments).
-    - returnoutput (bool, optional): Whether to capture and return output (default: True).
-    
+    - permission (bool, optional): User's explicit permission (default: False).
+    - command (str): The PowerShell command to execute.
+    - returnoutput (bool, optional): If True, captures output; if False, starts a new PowerShell window.
+
     Returns:
     - str: Command output or execution status.
     """
     if not command.strip():
         return "❌ No command provided."
 
-    # Extract the base command (first word)
+    # ✅ Extract base command
     base_command = command.split()[0]
 
-    # Check if command is blacklisted
+    # ✅ Block blacklisted commands
     if base_command in blacklisted:
         return f"❌ Command '{base_command}' is blacklisted and cannot be executed."
 
-    # Check if command requires permission
+    # ✅ Ask for permission if required
     if base_command in ask_first and not permission:
         return "⛔ Command not executed, ask the user for permission."
 
     try:
         if returnoutput:
-            # Run PowerShell command headlessly and capture output
+            # ✅ Capture PowerShell command output
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
                 capture_output=True, text=True, check=True
             )
             return result.stdout.strip() if result.stdout else "✅ Command executed successfully."
         else:
-            # Open a new PowerShell window and execute the command
-            ps_script = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command {command}' -WindowStyle Normal"
-            error_check_script = f"Start-Sleep -Seconds 3; if ($?) {{ '✅ Command executed' }} else {{ '❌ Command failed' }}"
+            # ✅ Launch PowerShell in a new window (non-blocking)
+            ps_script = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"' -WindowStyle Normal"
             
-            # Run first command
-            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script], check=True)
-
-            # Check for errors after 3 seconds
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", error_check_script],
-                capture_output=True, text=True, check=True
-            )
-            return result.stdout.strip()
+            # ✅ Start process and return immediately
+            subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script], shell=True)
             
+            return "✅ Command started in a new PowerShell window."
+    
     except subprocess.CalledProcessError as e:
-        return f"❌ Error executing command: {e}"
+        return f"❌ PowerShell Error: {e.stderr.strip() if e.stderr else str(e)}"
+    except Exception as e:
+        return f"❌ Unexpected Error: {str(e)}"
 def get_debug_mode():
     """Returns the current debug mode state."""
     return debug_mode
@@ -986,9 +1041,8 @@ def generate_embedding(text): # helper function
         return None  # Return None if embedding fails
 
 def retrieve_memory(query: str):
-    """Finds relevant memories using keyword matching and FAISS similarity search."""
+    """Finds relevant memories using FAISS similarity search only (no keyword matching)."""
     
-    # ✅ Load memory data
     if not os.path.exists(MEMORY_FILE):
         print("[❌ MEMORY FILE MISSING] No memories.json found.")
         return []
@@ -1002,52 +1056,38 @@ def retrieve_memory(query: str):
 
     query = query.lower().strip()
     results = []
+
     if get_debug_mode():
         print(f"[🔍 MEMORY DEBUG] Query: {query}")
 
-    # ✅ Step 1: Try Direct Keyword Search (More Flexible)
-    for category, entries in memory_data.items():
-        for entry in entries:
-            memory_text = entry["text"].lower()
-            
-            # ✅ Improve Matching: Allow Partial Matches, Ignore Word Order
-            if query in memory_text or any(word in memory_text for word in query.split()):
-                if get_debug_mode():
-                    print(f"[✅ KEYWORD MATCH] Found in category '{category}': {entry['text']}")
-                results.append(entry["text"])  # ✅ Always store, not just in debug mode
-
-    if results:
-        return results  # ✅ Return early if keyword matches are found
-
-    # ✅ Step 2: Use Embeddings if No Keyword Match
-    if get_debug_mode():
-        print("[🔍 MEMORY DEBUG] No direct keyword match. Trying embeddings...")
-
+    # ✅ Step 1: Convert query to an embedding
     query_embedding = generate_embedding(query)
-
     if query_embedding is None:
         print("[❌ EMBEDDING ERROR] Failed to generate query embedding.")
         return []
 
+    # ✅ Step 2: Search FAISS for similarity matches
     for category, entries in memory_data.items():
         embeddings = np.array([entry["embedding"] for entry in entries]).astype("float32")
 
         if embeddings.size > 0:
             index = faiss.IndexFlatL2(len(query_embedding))
             index.add(embeddings)
-            D, I = index.search(np.array([query_embedding], dtype="float32"), 3)
+            D, I = index.search(np.array([query_embedding], dtype="float32"), 5)  # Retrieve top 5
 
             for score, idx in zip(1 - D[0], I[0]):  # Convert L2 distance to similarity
-                if score > 0.7:
+                if score > 0.3:  # ✅ Adjusted similarity threshold (higher = stricter)
                     if get_debug_mode():
-                        print(f"[✅ EMBEDDING MATCH] Found in '{category}' with score {score}: {entries[idx]['text']}")
+                        print(f"[✅ EMBEDDING MATCH] '{entries[idx]['text']}' (Score: {score:.2f})")
                     results.append(entries[idx]['text'])
 
     if results:
-        return results  # ✅ Ensure embeddings are actually returned
+        return results  
+
     if get_debug_mode():
         print("[❌ MEMORY DEBUG] No relevant memories found.")
     return []
+
 
 def shutdown_vortex():
     print("[🛑 VORTEX SHUTDOWN] Exiting program...")
@@ -1189,7 +1229,7 @@ capabilities.register_function_in_registry("list_memory_categories", list_memory
 capabilities.register_function_in_registry("powershell", powershell)
 capabilities.register_function_in_registry("search_query", search_query)
 capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
-capabilities.register_function_in_registry("add_new_capability", add_new_capability)
+#capabilities.register_function_in_registry("add_new_capability", add_new_capability) #WIP
 capabilities.register_function_in_registry("restart_vortex", restart_vortex)
 capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
 capabilities.register_function_in_registry("get_weather_forecast", get_weather_forecast)
@@ -1208,8 +1248,26 @@ capabilities.register_function_in_registry("get_user_info", get_user_info)
 capabilities.register_function_in_registry("get_time", get_time)
 capabilities.register_function_in_registry("create_event", create_event)
 capabilities.register_function_in_registry("list_events", list_events)
+capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
 
 # ✅ Register Function Schemas
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "query_wolfram_alpha",
+        "description": "Fetches scientific, mathematical, and factual answers from Wolfram Alpha. this is an amazing tool! dont hesitate to use it to answer questions",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The question or equation to solve. Example: 'Solve x^2 - 4x + 4 = 0'"
+                }
+            },
+            "required": ["query"]
+        }
+    }
+})
 capabilities.register_function_schema({
     "type": "function",
     "function": {
