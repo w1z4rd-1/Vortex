@@ -7,7 +7,12 @@ from google.auth.transport.requests import Request
 # ---------------------------
 # 🌐 GOOGLE AUTH CONFIG
 # ---------------------------
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",  # Read emails
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",  # Mark emails as read, delete, etc.
+    "https://www.googleapis.com/auth/calendar"
+]
 CREDENTIALS_PATH = "creds.json"
 TOKEN_PATH = "token.json"
 

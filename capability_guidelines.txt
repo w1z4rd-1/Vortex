@@ -1,0 +1,135 @@
+VORTEX Capability Creation Guidelines
+
+Purpose
+This document provides guidelines for dynamically creating and registering new capabilities in VORTEX. It ensures that all functions follow a standard format, are properly registered, and can be used within the system.
+
+Function Format
+All functions must:
+- Have a clear docstring explaining its purpose and parameters.
+- Handle errors properly using try/except.
+- Return JSON-compatible data when applicable (e.g., dictionaries, lists, strings, numbers).
+- Include proper function registration and schema registration.
+
+Example:
+```python
+import requests
+
+def get_weather(city: str) -> dict:
+    """
+    Fetches the weather for a given city.
+    :param city: Name of the city.
+    :return: Dictionary containing weather details.
+    """
+    try:
+        response = requests.get(f"https://api.weather.com/{city}")
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+# Register the new capability
+capabilities.register_function_in_registry("get_weather", )get_weather
+
+# Schema registration for VORTEX
+capabilities.register_function_schema({
+    'type': 'function',
+    'function': {
+        'name': 'get_weather',
+        'description': 'Fetches weather data for a given city.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'city': {'type': 'string', 'description': 'Name of the city.'}
+            },
+            'required': ['city']
+        }
+    }
+}
+```
+
+Async vs Sync Functions
+- Use `async def` if the function:
+  - Calls an API (e.g., OpenAI, Weather API, Google APIs)
+  - Reads from a file or the internet
+- Otherwise, use a synchronous function.
+
+Example of an async function:
+```python
+import aiohttp
+import asyncio
+
+async def fetch_data(url: str) -> dict:
+    """Fetches data from an API asynchronously."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json()
+```
+
+Function Registry
+Every function must be registered in the capabilities registry:
+```python
+capabilities.register_function_in_registry("function_name", )function_name
+```
+Example:
+```python
+capabilities.register_function_in_registry("get_weather", )get_weather
+```
+
+Function Schema
+- Every function **must have a schema** for OpenAI tool calling.
+- Define parameters and required fields.
+
+Example schema:
+```python
+capabilities.register_function_schema({
+    'type': 'function',
+    'function': {
+        'name': 'get_weather',
+        'description': 'Fetches weather data for a given city.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'city': {'type': 'string', 'description': 'Name of the city.'}
+            },
+            'required': ['city']
+        }
+    }
+}
+```
+
+Error Handling
+- Always wrap function logic in `try/except`.
+- If an error occurs, return a dictionary:
+```python
+return {"error": "Description of the issue"}
+```
+Example:
+```python
+try:
+    data = fetch_weather(city)
+except Exception as e:
+    return {"error": str(e)}
+```
+
+Imports & Variables
+- **Avoid duplicate imports** in `capabilities.py`.
+- **Do not redefine** global variables if they exist.
+
+File Persistence
+- New functions must be appended to `generated_capabilities.py`.
+- This ensures they are **reloaded automatically** when VORTEX starts.
+
+Example:
+```python
+with open("generated_capabilities.py", "a", encoding="utf-8") as f:
+    f.write("\ndef function_name():\n    pass  # Function logic\n")
+    f.write("\ncapabilities.register_function_in_registry("function_name", )function_name\n")
+```
+
+Summary
+Following these guidelines ensures that all dynamically added functions:
+✅ Work consistently across VORTEX.
+✅ Are properly registered and callable.
+✅ Follow best practices for error handling and efficiency.
+
+**🚀 Always follow this document when adding new capabilities!**
+

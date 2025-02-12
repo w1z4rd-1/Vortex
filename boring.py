@@ -103,10 +103,10 @@ async def call_openai():
                     tool_choice=tool_choice_param,
                     timeout=15
                 ),
-                timeout=20
+                timeout=60
             )
         except asyncio.TimeoutError:
-            print(f"{COLOR_RED}[❌ TIMEOUT ERROR] OpenAI API did not respond within 20 seconds.{COLOR_RESET}")
+            print(f"{COLOR_RED}[❌ TIMEOUT ERROR] OpenAI API did not respond within 60 seconds.{COLOR_RESET}")
             return
         except Exception as e:
             print(f"{COLOR_RED}[❌ API ERROR] {e}{COLOR_RESET}")

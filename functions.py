@@ -8,11 +8,15 @@ import importlib
 import tempfile
 import glob
 import ctypes
+from auth import authorize
 from ctypes import wintypes
 import markdown
 import webbrowser
 import wikipediaapi
 import json
+import base64
+from email.mime.text import MIMEText
+from googleapiclient.discovery import build
 import re
 import openai  # Add this import
 from dotenv import load_dotenv
@@ -58,7 +62,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)  # Ensure the directory exists
 TEMP_IMAGE_PATH = os.path.join(TEMP_DIR, "screenshot.png")  # Path for saving screenshots
 # Debug mode function
 ALLOWED_FILES = [
-    "VORTEX.py", "boring.py", "functions.py", "voice.py", "auth.py", "build.py"
+    "VORTEX.py", "boring.py", "functions.py", "voice.py", "auth.py", "build.py", "capabilities.py"
 ]
 CAPABILITIES_FILE = "capabilities.py"
 
@@ -73,69 +77,77 @@ import openai
 
 import openai
 
-def add_new_capability(function_name):
-    """Starts a separate process to build a new capability."""
-    try:
-        print(f"[🛠 STARTING BUILD] Creating '{function_name}' capability in a new process...")
 
-        python_executable = sys.executable  # ✅ Get the correct Python path
-        build_script = os.path.join(os.getcwd(), "build_capability.py")
+import os
+import re
 
-        # ✅ Ensure the file exists
-        if not os.path.exists(build_script):
-            return f"❌ ERROR: Missing {build_script}. Cannot build capability."
+def add_new_capability(function_name: str, function_code: str):
+    """
+    Adds a new capability function to capabilities.py and persists it in generated_capabilities.py.
+    Assumes function_code includes:
+    - Necessary imports
+    - Global variables (if needed)
+    - Function definition
+    - capabilities.register_function_in_registry(...)
+    - capabilities.register_function_schema(...)
 
-        # ✅ Run PowerShell without mangling arguments
-        subprocess.Popen([python_executable, build_script, function_name], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    It prevents duplicate imports and function overwrites.
+    """
+    capabilities_file = "capabilities.py"
+    generated_file = "generated_capabilities.py"
 
-        return f"🛠 VORTEX is now building the capability '{function_name}' in a separate process..."
+    # Read existing capabilities.py content
+    with open(capabilities_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Extract existing function names
+    existing_functions = set(re.findall(r"^def\s+(\w+)\(.*\):", content, re.MULTILINE))
+
+    # Check if function already exists
+    if function_name in existing_functions:
+        print(f"[⚠️ SKIPPED] Function '{function_name}' already exists in capabilities.py")
+        return
+
+    # Extract existing imports
+    existing_imports = set(re.findall(r"^import\s+\w+|^from\s+\S+\s+import\s+\S+", content, re.MULTILINE))
+
+    # Extract new function imports
+    new_imports = set(re.findall(r"^import\s+\w+|^from\s+\S+\s+import\s+\S+", function_code, re.MULTILINE))
+
+    # Identify missing imports
+    missing_imports = new_imports - existing_imports
+
+    # Append missing imports at the top
+    if missing_imports:
+        content = "\n".join(sorted(missing_imports)) + "\n\n" + content
+
+    # Append the new function as-is
+    content += f"\n\n# === Auto-Generated Function ===\n{function_code}\n"
+
+    # Write back to capabilities.py
+    with open(capabilities_file, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Persist to generated_capabilities.py for future auto-loading
+    with open(generated_file, "a", encoding="utf-8") as f:
+        f.write(f"\n\n# === Auto-Generated Function ===\n{function_code}\n")
+
+    print(f"[✅ SUCCESS] Function '{function_name}' added to capabilities.py and persisted in {generated_file}.")
+
+def read_guidelines():
+    """
+    Reads the 'capability_guidelines.txt' file and returns its content.
     
-    except Exception as e:
-        return f"❌ Failed to start capability building process: {str(e)}"
-    
-def generate_new_function(function_name):
-    """Generates a new function using OpenAI and registers it dynamically."""
-    print(f"🛠 Generating new capability: {function_name}...")
+    Returns:
+        str: The content of the capability guidelines, or an error message if the file is missing.
+    """
+    guidelines_file = "capability_guidelines.txt"
 
-    try:
-        # ✅ Ask OpenAI to create a function
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"Write a Python function named '{function_name}' that performs a useful task."}
-            ]
-        )
+    if not os.path.exists(guidelines_file):
+        return "⚠️ Capability guidelines file not found."
 
-        function_code = response.choices[0].message["content"].strip()
-
-        # ✅ Validate function code (ensure it starts with 'def')
-        if not function_code.startswith("def"):
-            print(f"❌ ERROR: OpenAI returned invalid function code:\n{function_code}")
-            return
-
-        # ✅ Save function to `capabilities.py`
-        with open("capabilities.py", "a", encoding="utf-8") as f:
-            f.write(f"\n{function_code}\n")
-            f.write(f"\ncapabilities.register_function_in_registry(\"{function_name}\", {function_name})\n")
-
-        print(f"✅ Function '{function_name}' successfully added to capabilities!")
-    
-        # ✅ Reload capabilities (avoid restart)
-        import importlib
-        importlib.reload(capabilities)
-
-        print(f"🔄 Reloaded capabilities. '{function_name}' is now available!")
-
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("❌ ERROR: No function name provided!")
-        sys.exit(1)
-
-    function_name = sys.argv[1]
-    generate_new_function(function_name)
+    with open(guidelines_file, "r", encoding="utf-8") as f:
+        return f.read()
 
 def restart_vortex():
     """Restarts VORTEX to apply new capabilities and reload memory."""
@@ -1221,7 +1233,68 @@ def categorize_memory(text):
         print(f"[❌ ERROR] Failed to categorize memory: {e}")
         return "general"  # ✅ Safe fallback category
 
+
+def read_gmail(count: int = 5):
+    """Fetches unread emails from Gmail and returns a summary."""
+    try:
+        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+
+        results = service.users().messages().list(userId="me", labelIds=["INBOX"], q="is:unread", maxResults=count).execute()
+        messages = results.get("messages", [])
+
+        email_summaries = []
+        for msg in messages:
+            msg_data = service.users().messages().get(userId="me", id=msg["id"]).execute()
+            headers = msg_data["payload"]["headers"]
+            
+            subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
+            sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown Sender")
+            
+            email_summaries.append(f"📩 **From:** {sender} | **Subject:** {subject}")
+
+        return "\n".join(email_summaries) if email_summaries else "✅ No unread emails."
     
+    except Exception as e:
+        return f"❌ Gmail API Error: {str(e)}"
+    
+def send_email(to: str, subject: str, body: str):
+    """Sends an email using Gmail API."""
+    try:
+        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+
+        message = MIMEText(body)
+        message["to"] = to
+        message["subject"] = subject
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        send_result = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
+        return f"✅ Email sent to {to} (ID: {send_result['id']})"
+    
+    except Exception as e:
+        return f"❌ Error sending email: {str(e)}"
+
+def modify_email(email_id: str, action: str):
+    """Marks an email as read or deletes it."""
+    try:
+        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+
+        if action == "read":
+            service.users().messages().modify(userId="me", id=email_id, body={"removeLabelIds": ["UNREAD"]}).execute()
+            return f"✅ Email {email_id} marked as read."
+
+        elif action == "delete":
+            service.users().messages().delete(userId="me", id=email_id).execute()
+            return f"🗑️ Email {email_id} deleted."
+
+        else:
+            return "❌ Invalid action. Use 'read' or 'delete'."
+    
+    except Exception as e:
+        return f"❌ Email modification error: {str(e)}"
+    
+capabilities.register_function_in_registry("read_gmail", read_gmail)
+capabilities.register_function_in_registry("send_email", send_email)
+capabilities.register_function_in_registry("modify_email", modify_email)
 capabilities.register_function_in_registry("store_memory", store_memory)
 capabilities.register_function_in_registry("retrieve_memory", retrieve_memory)
 capabilities.register_function_in_registry("delete_memory", delete_memory)
@@ -1229,12 +1302,13 @@ capabilities.register_function_in_registry("list_memory_categories", list_memory
 capabilities.register_function_in_registry("powershell", powershell)
 capabilities.register_function_in_registry("search_query", search_query)
 capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
-#capabilities.register_function_in_registry("add_new_capability", add_new_capability) #WIP
+capabilities.register_function_in_registry("add_new_capability", add_new_capability) #WIP
 capabilities.register_function_in_registry("restart_vortex", restart_vortex)
 capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
 capabilities.register_function_in_registry("get_weather_forecast", get_weather_forecast)
 capabilities.register_function_in_registry("youtube_search", youtube_search)
 capabilities.register_function_in_registry("modrinth_search", modrinth_search)
+capabilities.register_function_in_registry("read_guidelines", read_guidelines)
 capabilities.register_function_in_registry("generate_image", generate_image)
 capabilities.register_function_in_registry("clarify_and_launch", clarify_and_launch)
 capabilities.register_function_in_registry("analyze_image", analyze_image)
@@ -1251,6 +1325,70 @@ capabilities.register_function_in_registry("list_events", list_events)
 capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
 
 # ✅ Register Function Schemas
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "read_gmail",
+        "description": "Fetches unread Gmail messages.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "description": "Number of unread emails to retrieve.",
+                    "default": 5
+                }
+            },
+            "required": []
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "send_email",
+        "description": "Sends an email using Gmail.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address."},
+                "subject": {"type": "string", "description": "Subject of the email. "},
+                "body": {"type": "string", "description": "Email content."}
+            },
+            "required": ["to", "subject", "body"]
+        }
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "modify_email",
+        "description": "Marks an email as read or deletes it.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "email_id": {"type": "string", "description": "ID of the email to modify."},
+                "action": {"type": "string", "enum": ["read", "delete"], "description": "Action to perform on the email."}
+            },
+            "required": ["email_id", "action"]
+        }
+    }
+})
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "read_guidelines",
+        "description": "Reads and returns the content of the capability guidelines document.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        },
+        "required": []
+    }
+})
+
 capabilities.register_function_schema({
     "type": "function",
     "function": {
@@ -1473,7 +1611,7 @@ capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "read_vortex_code",
-        "description": "Reads and returns the contents of a VORTEX source file.",
+        "description": "Reads and returns the contents of a VORTEX source file. if any function or capability runs into an error, please use this to try to help debug the error, or even provide the user with the fix!",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1488,16 +1626,28 @@ capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "add_new_capability",
-        "description": "Creates and registers a new function dynamically when explicitly requested by the user.",
+        "description": "Creates and registers a new function when explicitly requested by the user. \
+                        The function code must include the full function definition, required imports, global variables, \
+                        function registry entry, and schema registration.  vortex writes the code, NOT THE USER.  run read_guidelines first for information on nessesary formating",
         "parameters": {
             "type": "object",
             "properties": {
-                "function_name": {"type": "string", "description": "The name of the function to be created."}
+                "function_name": {
+                    "type": "string",
+                    "description": "The name of the function to be created. It must be a valid Python function name."
+                },
+                "function_code": {
+                    "type": "string",
+                    "description": "The full function definition as a string, including necessary imports, \
+                                    function logic, variable definitions, capabilities function registry entry, \
+                                    and schema registration."
+                }
             },
-            "required": ["function_name"]
+            "required": ["function_name", "function_code"]
         }
     }
 })
+
 
 capabilities.register_function_schema({
     "type": "function",
