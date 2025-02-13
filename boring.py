@@ -4,13 +4,13 @@ import os
 import asyncio
 import inspect
 from dotenv import load_dotenv
-
+from capabilities import get_function_registry, get_function_schemas
 # Import dynamic capabilities and helper functions.
 import capabilities  # This module should provide:
                      # - get_function_schemas(): returns function schemas (or None if none)
                      # - get_function_registry(): returns a dict mapping function names to callables.
 from functions import set_debug_mode, get_debug_mode, retrieve_memory, read_vortex_code
-
+#from display import display
 # ------------------------------
 # VORTEX Version & Environment Setup
 # ------------------------------
@@ -58,8 +58,8 @@ conversation_history = [{"role": "system", "content": load_system_prompt()}]
 async def call_openai():
     """
     Processes the current conversation history by calling the OpenAI API.
-    It retrieves relevant memories, passes any requested function calls,
-    and updates the conversation history with the assistant's response.
+    It retrieves relevant memories, processes function calls, and updates
+    the conversation history with the assistant's response.
     """
     global conversation_history
     user_input = conversation_history[-1]["content"]
@@ -72,14 +72,13 @@ async def call_openai():
         memory_text = "\n".join(memories)
         if get_debug_mode():
             print(f"[✅ MEMORY FOUND] Retrieved: {memory_text}")
-        # Append the memory as a SYSTEM message to remind the model.
         conversation_history.append({
             "role": "system",
             "content": f"Before answering, remember this: {memory_text}"
         })
     else:
         if get_debug_mode():
-            print(f"[❌ NO MEMORY FOUND] No relevant memories retrieved.")
+            print("[❌ NO MEMORY FOUND] No relevant memories retrieved.")
 
     max_retries = 10  # Prevent infinite loops
     attempt = 0
@@ -89,28 +88,25 @@ async def call_openai():
         if get_debug_mode():
             print(f"[🔄 CALLING OPENAI] Attempt {attempt}/{max_retries}")
 
-        # Retrieve function schemas if available.
-        function_schemas = capabilities.get_function_schemas() if capabilities.get_function_schemas() else None
+        function_schemas = get_function_schemas() if get_function_schemas() else None
         tool_choice_param = "auto" if function_schemas else None
 
         try:
-            # Call the OpenAI API with timeouts to prevent indefinite hanging.
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-3.5-turbo",
                     messages=conversation_history,
                     tools=function_schemas,
                     tool_choice=tool_choice_param,
-                    timeout=15
                 ),
                 timeout=60
             )
         except asyncio.TimeoutError:
-            print(f"{COLOR_RED}[❌ TIMEOUT ERROR] OpenAI API did not respond within 60 seconds.{COLOR_RESET}")
-            return
+            print("[❌ TIMEOUT ERROR] OpenAI API did not respond within 60 seconds.")
+            return "I'm sorry, but I encountered a timeout error."
         except Exception as e:
-            print(f"{COLOR_RED}[❌ API ERROR] {e}{COLOR_RESET}")
-            return
+            print(f"[❌ API ERROR] {e}")
+            return "I'm sorry, but I encountered an API error."
 
         assistant_message = response.choices[0].message
         conversation_history.append(assistant_message)
@@ -118,20 +114,18 @@ async def call_openai():
         if get_debug_mode():
             print(f"[🤖 OPENAI RESPONSE] {assistant_message.content}")
 
-        # Display the assistant's response.
         if assistant_message.content:
             print(f"{COLOR_BLUE}[🤖 VORTEX]: {assistant_message.content}{COLOR_RESET}")
+            return assistant_message.content  # ✅ Return response text
         elif assistant_message.tool_calls:
             if get_debug_mode():
-                print(f"[🛠 TOOL CALL ONLY] OpenAI returned tool calls without message content.")
+                print("[🛠 TOOL CALL ONLY] OpenAI returned tool calls without message content.")
         else:
-            print(f"{COLOR_RED}[❌ ERROR] OpenAI returned an empty response!{COLOR_RESET}")
+            print("[❌ ERROR] OpenAI returned an empty response!")
 
-        # Exit if no tool calls are requested.
         if not assistant_message.tool_calls:
             break
 
-        # Process any tool calls.
         tool_responses = []
         for tool_call in assistant_message.tool_calls:
             function_name = tool_call.function.name
@@ -141,26 +135,23 @@ async def call_openai():
             if get_debug_mode():
                 print(f"[🔄 CHECKING FUNCTION] ID: {tool_call.id} | Name: {function_name}")
 
-            function_to_call = capabilities.get_function_registry().get(function_name)
+            function_to_call = get_function_registry().get(function_name)
             if not function_to_call:
-                print(f"{COLOR_RED}[❌ MISSING FUNCTION] '{function_name}' not found.{COLOR_RESET}")
+                print(f"[❌ MISSING FUNCTION] '{function_name}' not found.")
 
-                # Suggest similar function names if available.
-                similar_functions = [f for f in capabilities.get_function_registry().keys() if function_name.lower() in f]
+                similar_functions = [f for f in get_function_registry().keys() if function_name.lower() in f]
                 if similar_functions:
-                    print(f"{COLOR_YELLOW}[💡 SUGGESTED FIX] Did you mean: {', '.join(similar_functions)}?{COLOR_RESET}")
+                    print(f"[💡 SUGGESTED FIX] Did you mean: {', '.join(similar_functions)}?")
                 continue
 
             try:
                 if get_debug_mode():
                     print(f"[🚀 EXECUTING] Running {function_name}({json.dumps(function_args)})")
-                # Await async functions automatically.
                 if inspect.iscoroutinefunction(function_to_call):
                     function_result = await function_to_call(**function_args)
                 else:
                     function_result = function_to_call(**function_args)
 
-                # Log any change in debug mode if applicable.
                 if function_name == "debugmode":
                     print(f"[🛠 DEBUG MODE] New state: {'ON' if get_debug_mode() else 'OFF'}")
 
@@ -174,19 +165,19 @@ async def call_openai():
                 })
             except Exception as e:
                 if get_debug_mode():
-                    print(f"{COLOR_RED}[❌ FUNCTION ERROR] {function_name}: {e}{COLOR_RESET}")
+                    print(f"[❌ FUNCTION ERROR] {function_name}: {e}")
                 tool_responses.append({
                     "role": "tool",
                     "tool_call_id": function_call_id,
                     "content": json.dumps({"error": f"Execution failed: {str(e)}"})
                 })
 
-        # Append tool responses to the conversation and retry the OpenAI call.
-        conversation_history.extend(tool_responses)
+        conversation_history.extend(tool_responses)  # ✅ Append tool responses and retry
         continue
 
     if get_debug_mode():
         print("[🛑 EXITING] Finalizing response; no further function calls.")
+    return "I'm sorry, but I encountered an issue processing your request."
 
 # ------------------------------
 # Conversation History Helpers

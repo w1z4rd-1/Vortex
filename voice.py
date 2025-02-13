@@ -5,76 +5,58 @@ import numpy as np
 import wave
 import pyaudio
 import whisper
+import openai
 import pvporcupine
+import sounddevice as sd
+import io
+import threading
+import librosa
+from openai import OpenAI
 from pvrecorder import PvRecorder
+from scipy.fftpack import fft
 from dotenv import load_dotenv
 import warnings
-
-# Import debug helper functions from your functions module.
-# These should include at least get_debug_mode() (and optionally set_debug_mode() if needed).
+#from display import display
 from functions import set_debug_mode, get_debug_mode
+from pydub import AudioSegment
 
-# Suppress FFMPEG warnings (optional)
+# Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# ------------------------------
-# Environment & API Keys
-# ------------------------------
+# Load environment variables
 load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORCUPINE_KEY = os.getenv("PORCUPINE_ACCESS_KEY")
-MODEL_PATH = "VORTEX.ppn"  # Change this to your keyword model path if needed
+MODEL_PATH = "VORTEX.ppn"
 
-# ------------------------------
-# ANSI Escape Codes for Colors
-# ------------------------------
-COLOR_GREEN = "\033[92m"  # For success/debug messages
-COLOR_BLUE  = "\033[94m"  # For normal responses
-COLOR_RED   = "\033[91m"  # For error messages
-COLOR_RESET = "\033[0m"   # To reset terminal color
-
-# ------------------------------
-# Load Whisper Model
-# ------------------------------
-if get_debug_mode():
-    print(f"{COLOR_GREEN}Loading Whisper model...{COLOR_RESET}")
-whisper_model = whisper.load_model("base")  # Change to "tiny", "small", etc. for performance
+client = OpenAI()  # ✅ Initialize OpenAI client
 
 # ------------------------------
 # Wake Word Detection
 # ------------------------------
 def detect_wake_word():
-    """
-    Listens for the wake word using Porcupine and PvRecorder.
-    Returns True once the wake word is detected.
-    """
+    """Listens for the wake word using Porcupine."""
     if get_debug_mode():
-        print(f"{COLOR_GREEN}Listening for wake word...{COLOR_RESET}")
-    
-    # Create a Porcupine instance using your access key and keyword model.
+        print("[Listening for wake word...]")
+
     porcupine = pvporcupine.create(
         access_key=PORCUPINE_KEY,
         keyword_paths=[MODEL_PATH]
     )
     
-    # Create and start the recorder (device_index=-1 selects the default microphone).
     recorder = PvRecorder(device_index=-1, frame_length=porcupine.frame_length)
     recorder.start()
     
     detected = False
     try:
         while True:
-            # recorder.read() returns a list; convert it to a NumPy array of type int16.
             pcm = np.array(recorder.read(), dtype=np.int16)
             keyword_index = porcupine.process(pcm)
             if keyword_index >= 0:
-                print(f"{COLOR_GREEN}Wake word detected!{COLOR_RESET}")
+                print("[Wake word detected!]")
                 detected = True
                 break
-            # A short sleep prevents excessive CPU usage.
             time.sleep(0.01)
-    except KeyboardInterrupt:
-        print(f"{COLOR_RED}[EXIT] User terminated wake word detection.{COLOR_RESET}")
-        sys.exit()
     finally:
         recorder.stop()
         porcupine.delete()
@@ -82,27 +64,17 @@ def detect_wake_word():
     return detected
 
 # ------------------------------
-# Speech Recording
+# Speech Recording & Transcription
 # ------------------------------
-def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_duration=3.0):
-    """
-    Records audio from the default microphone until a period of silence is detected.
-    
-    Args:
-        filename (str): The filename to save the recorded WAV audio.
-        silence_threshold (int): The threshold for determining silence.
-        silence_duration (float): The duration (in seconds) of silence required to stop recording.
-    
-    Returns:
-        str: The filename of the saved audio file.
-    """
+def record_audio(filename="recorded_audio.wav", silence_threshold=1300, silence_duration=1.2):
+    """Records audio until silence is detected."""
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
     RATE = 16000
 
     if get_debug_mode():
-        print(f"{COLOR_GREEN}Recording audio. Speak now...{COLOR_RESET}")
+        print("[Recording audio...]")
 
     audio = pyaudio.PyAudio()
     stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE,
@@ -117,27 +89,21 @@ def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_
             data = stream.read(CHUNK, exception_on_overflow=False)
             frames.append(data)
             
-            # Convert the audio chunk to a NumPy array to calculate its average volume.
             audio_data = np.frombuffer(data, dtype=np.int16)
             volume = np.abs(audio_data).mean()
             
-            # If volume is below the threshold for a sustained duration, stop recording.
             if volume < silence_threshold:
                 if time.time() - last_audio_time > silence_duration:
                     if get_debug_mode():
-                        print(f"{COLOR_GREEN}Silence detected; stopping recording.{COLOR_RESET}")
+                        print("[Silence detected; stopping recording.]")
                     capturing = False
             else:
                 last_audio_time = time.time()
-    except KeyboardInterrupt:
-        print(f"{COLOR_RED}[EXIT] User interrupted recording.{COLOR_RESET}")
-        sys.exit()
     finally:
         stream.stop_stream()
         stream.close()
         audio.terminate()
 
-    # Save the recorded frames to a WAV file.
     with wave.open(filename, 'wb') as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(audio.get_sample_size(FORMAT))
@@ -146,27 +112,68 @@ def record_audio(filename="recorded_audio.wav", silence_threshold=1200, silence_
 
     return filename
 
-# ------------------------------
-# Audio Transcription
-# ------------------------------
 def transcribe_audio(audio_path):
-    """
-    Transcribes the audio file at the given path using the Whisper model.
-    
-    Args:
-        audio_path (str): The path to the audio file to transcribe.
-    
-    Returns:
-        str: The transcribed text, or None if no speech was detected.
-    """
+    """Transcribes the audio file using the Whisper model."""
     if get_debug_mode():
-        print(f"{COLOR_GREEN}Transcribing audio from file: {audio_path}{COLOR_RESET}")
-        
-    result = whisper_model.transcribe(audio_path)
+        print(f"[Transcribing: {audio_path}]")
+
+    result = whisper.load_model("tiny").transcribe(audio_path)
     transcript = result["text"].strip()
     
     if get_debug_mode():
-        print("=== Transcription ===")
-        print(transcript if transcript else "[No speech detected]")
+        print(f"== Transcription: {transcript} ==")
         
     return transcript if transcript else None
+
+# ------------------------------
+# OpenAI TTS with MP3-Based Visualization
+# ------------------------------
+def tts_speak(text):
+    """Generates OpenAI's TTS audio, saves it to an MP3, and plays it while triggering visualizer."""
+    if get_debug_mode():
+        print(f"[🔊 Speaking: {text}]")
+
+    try:
+        speech_file_path = "tts_output.mp3"
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="nova",
+            input=text
+        )
+
+        response.stream_to_file(speech_file_path)  # ✅ Save full speech to MP3
+
+        # ✅ Start visualizer reaction **before playback**
+        # threading.Thread(target=display.react_to_audio, args=(speech_file_path,), daemon=True).start() #audio responsive visuals later
+
+        # ✅ Play the saved MP3
+        play_audio(speech_file_path)
+
+    except Exception as e:
+        if get_debug_mode():
+            print(f"[❌ ERROR in TTS] {e}")
+
+def play_audio(mp3_path):
+    """Plays the generated TTS audio while updating visuals based on actual speech."""
+    try:
+        audio = AudioSegment.from_mp3(mp3_path)
+        wav_data = io.BytesIO()
+        audio.export(wav_data, format="wav")  # ✅ Convert to WAV
+
+        wav_data.seek(0)
+        sound = AudioSegment.from_wav(wav_data)
+        samples = np.array(sound.get_array_of_samples(), dtype=np.int16)
+
+        if get_debug_mode():
+            print(f"[🔊 Playing {len(samples)} samples...]")
+
+        # ✅ Play audio smoothly
+        sd.play(samples, samplerate=sound.frame_rate)
+        sd.wait()
+
+        if get_debug_mode():
+            print("[✅ Playback Completed]")
+
+    except Exception as e:
+        if get_debug_mode():
+            print(f"[❌ ERROR in Playback] {e}")

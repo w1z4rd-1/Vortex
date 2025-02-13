@@ -11,3 +11,5 @@ dist/VORTEX.exe
 memory.json
 temp/
 .vscode/
+test_output.mp3
+tts_output.mp3

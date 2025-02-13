@@ -492,7 +492,7 @@ def modrinth_search(query: str) -> str:
 
     sanitized_query = re.sub(r"[^\w\s]", "", query).replace(" ", "+")
     search_url = f"https://modrinth.com/mods?q={sanitized_query}&f=categories:utility&f=categories:optimization&g=categories:fabric&e=client"
-
+    
     webbrowser.open(search_url)
     return f"✅ Opened Modrinth search for: {query}"
 def get_shortcuts():
@@ -1018,7 +1018,7 @@ def summarize_category(category_name: str):
 
         # Ask GPT to summarize similar memories
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Merge similar items into a concise statement."},
                 {"role": "user", "content": f"Summarize these: {memory_texts}"}
