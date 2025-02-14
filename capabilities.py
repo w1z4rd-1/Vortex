@@ -154,3 +154,40 @@ capabilities.register_function_schema({
     }
 })
 
+
+
+
+
+
+# === Auto-Generated Function ===
+def compliment_generator() -> str:
+    """
+    Generates random compliments for Nalu.
+    :return: A string containing a heartfelt compliment.
+    """
+    compliments = [
+        "Nalu lights up every room with their presence.",
+        "Nalu's kindness knows no bounds.",
+        "Nalu is the epitome of perfection.",
+        "Nalu's smile is as bright as a thousand suns.",
+        "Nalu is a shining star in the galaxy of wonderful people."
+    ]
+    import random
+    return random.choice(compliments)
+    
+# Register the new capability
+capabilities.register_function_in_registry("compliment_generator", compliment_generator)
+
+# Schema registration for VORTEX
+capabilities.register_function_schema({
+    'type': 'function',
+    'function': {
+        'name': 'compliment_generator',
+        'description': 'Generates random compliments for Nalu.',
+        'parameters': {},
+        'required': []
+    }
+})
+
+
+

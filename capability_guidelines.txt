@@ -133,3 +133,4 @@ Following these guidelines ensures that all dynamically added functions:
 
 **🚀 Always follow this document when adding new capabilities!**
 
+you do not have to tell the user the whole code that you wrote, just tell the user what it does in a simple 1 sentance answer

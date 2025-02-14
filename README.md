@@ -8,13 +8,13 @@ Welcome to VORTEX – a local AI assistant designed to be fast, powerful, and co
 
 🚀 How to Use VORTEX
 
-📌 1️⃣ Install Dependencies
+1️⃣ Install Dependencies
 
 Ensure you have Python 3.10+ installed, then run:
 
 pip install -r requirements.txt
 
-▶ 2️⃣ Run VORTEX
+2️⃣ Run VORTEX
 
 Start the assistant:
 
@@ -24,19 +24,31 @@ Say the wake word, then speak naturally!
 
 🔮 Planned Future Features
 
-✨ Two-Way Communication with iPhone via Siri Shortcuts📞 Phone Call Handling (Making & Receiving Calls with AI Responses)🎨 Real-Time Audio-Responsive OpenGL Visuals (Paused for now, but it's fire! 🔥)🔌 Local API for External Commands & Smart Home Control🛠 Integration with Custom Task Automations🗣 Support for More Wake Words & Multi-User Profiles🔐 Encrypted AI Conversations & Memory Retention
+Two-Way Communication with iPhone via Siri Shortcuts
+
+Phone Call Handling (Making & Receiving Calls with AI Responses)
+
+Real-Time Audio-Responsive OpenGL Visuals (Paused for now, but it's fire! 🔥)
+
+Local API for External Commands & Smart Home Control
+
+Integration with Custom Task Automations
+
+Support for More Wake Words & Multi-User Profiles
+
+Encrypted AI Conversations & Memory Retention
 
 📌 Customization & Settings
 
 Modify config.py (if it exists) or directly edit:
 
-🖥 VORTEX.py – Main assistant logic.
+VORTEX.py – Main assistant logic.
 
-🎙 voice.py – Handles wake word detection, speech recognition, and TTS.
+voice.py – Handles wake word detection, speech recognition, and TTS.
 
-🔗 boring.py – Manages OpenAI API requests.
+boring.py – Manages OpenAI API requests.
 
-🎛 display.py (Disabled, but can be re-enabled for OpenGL visuals.)
+display.py (Disabled, but can be re-enabled for OpenGL visuals.)
 
 ❓ Troubleshooting
 
@@ -46,11 +58,11 @@ python VORTEX.py --debug
 
 For slow responses, consider:
 
-⚡ Switching TTS to streaming mode.
+Switching TTS to streaming mode.
 
-⚙ Using "gpt-3.5-turbo" instead of "gpt-4o" in boring.py.
+Using "gpt-3.5-turbo" instead of "gpt-4o" in boring.py.
 
-🎤 Reducing silence threshold in voice.py.
+Reducing silence threshold in voice.py.
 
 🎤 Why I Built This
 
