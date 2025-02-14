@@ -1,140 +1,64 @@
-# ⚡ VORTEX - Voice-Operated Responsive Task Execution eXpert
+🔥 VORTEX - AI-Powered Voice Assistant
 
-🚀 **The Ultimate AI Assistant** | 🗣 **Voice-Controlled** | 🖥 **System Automation** | 🌍 **Web-Integrated**
+Welcome to VORTEX – a local AI assistant designed to be fast, powerful, and completely under your control.It features text-to-speech (TTS), voice recognition, and future integrations for phone calls and automation.
 
-> **VORTEX** is a local, offline-capable, AI-driven assistant that can execute commands, manage your system, control applications, search the web, and more. Inspired by **JARVIS** from Iron Man, it aims to be the smartest, most responsive digital companion available!
+🎯 Current Features
 
----
+✅ Fast Text-to-Speech (TTS) with OpenAI's tts-1 model.✅ Wake word detection with Porcupine for hands-free activation.✅ Voice-to-text transcription using Whisper AI.✅ AI-powered conversations with OpenAI's gpt-4o.✅ Flexible command recognition for automating tasks.
 
-## 🌟 **Features**
+🚀 How to Use VORTEX
 
-### 🎙️ **Voice Control & Wake Word**
+📌 1️⃣ Install Dependencies
 
-- Detects wake words using **Porcupine** 🦔
-- Whisper AI-powered **speech recognition** 🎤
-- Supports **text & voice interaction** 🔄
+Ensure you have Python 3.10+ installed, then run:
 
-### 🛠️ **System Automation**
+pip install -r requirements.txt
 
-- Execute **PowerShell commands** with safety checks 💻
-- Launch & control applications 🚀
-- Retrieve system information 🖥️
-- Manage files, memory, and clipboard 📂
+▶ 2️⃣ Run VORTEX
 
-### 🌐 **Web & API Integrations**
+Start the assistant:
 
-- **Google Search** & **Wikipedia Lookup** 🔍
-- **YouTube & Modrinth Search** 🎵🎮
-- **Weather Forecast API** ☀️🌧️
-- **Wolfram Alpha for Math & Science** 🧠📚
-- **Spotify Control (Play, Pause, Volume)** 🎶
+python VORTEX.py
 
-### 🗂 **Memory & Recall**
+Say the wake word, then speak naturally!
 
-- Store and retrieve past interactions 📖
-- Persistent **vector-based memory** (FAISS) 🧠
-- Smart **context awareness** for better responses ⚡
+🔮 Planned Future Features
 
-### 🎨 **AI-Powered Creativity**
+✨ Two-Way Communication with iPhone via Siri Shortcuts📞 Phone Call Handling (Making & Receiving Calls with AI Responses)🎨 Real-Time Audio-Responsive OpenGL Visuals (Paused for now, but it's fire! 🔥)🔌 Local API for External Commands & Smart Home Control🛠 Integration with Custom Task Automations🗣 Support for More Wake Words & Multi-User Profiles🔐 Encrypted AI Conversations & Memory Retention
 
-- **DALL·E Image Generation** 🎨🤖
-- **AI Image Analysis** 🖼️🔍
-- **Markdown Preview in Browser** 📝
+📌 Customization & Settings
 
-### 🔒 **Privacy-Focused**
+Modify config.py (if it exists) or directly edit:
 
-- Runs **locally** (No cloud dependencies) 🏠
-- Fully **open-source** 🔓
-- Customizable **security policies** 🛡️
+🖥 VORTEX.py – Main assistant logic.
 
----
+🎙 voice.py – Handles wake word detection, speech recognition, and TTS.
 
-## 🎮 **Usage**
+🔗 boring.py – Manages OpenAI API requests.
 
-### **Voice Commands** 🎤
+🎛 display.py (Disabled, but can be re-enabled for OpenGL visuals.)
 
-- Say **"VORTEX"** to wake it up!
-- Speak naturally:
-  - *"Search Wikipedia for black holes."*
-  - *"What’s the weather like?"*
-  - *"Play Never Gonna Give You Up on Spotify."*
+❓ Troubleshooting
 
-### **Text Commands** ⌨️
+If VORTEX exits immediately, try:
 
-- Type commands directly into the console:
+python VORTEX.py --debug
 
-```bash
-> launch_shortcut("Google Chrome")
-> search_query("How do black holes work?")
-> get_time()
-```
+For slow responses, consider:
 
-### **PowerShell & System Control** ⚡
+⚡ Switching TTS to streaming mode.
 
-- Execute safe **PowerShell** commands:
+⚙ Using "gpt-3.5-turbo" instead of "gpt-4o" in boring.py.
 
-```bash
-> powershell("Get-Process")
-```
+🎤 Reducing silence threshold in voice.py.
 
----
+🎤 Why I Built This
 
-## 🚀 **Advanced Features**
+This is just for me, but damn – it's fun.VORTEX is evolving into a fully local AI that feels like JARVIS.Let's keep pushing the boundaries. 🚀🔥
 
-### 🔥 **Custom Functions & AI Tools**
+⚠ Disclaimer
 
-- Dynamically generate and register **new functions**:
+This project is purely experimental.If it accidentally calls Elon Musk, that's on you. 🤖📞💥
 
-```bash
-> add_new_capability("calculate_fibonacci")
-```
-
-### 🌎 **Web Scraping & Browsing**
-
-- Extract real-time info with **Google Search API** 🔎
-- Fetch live data from Wikipedia 📖
-
-### 🔧 **Debug Mode & Logs**
-
-- Toggle **debug mode** for detailed logs:
-
-```bash
-> debugmode(True)
-```
-
----
-
-## 💡 **Planned Features**
-
-🔹 **AutoHotkey Integration** – Full PC control ⚙️ 🔹 **Email Management** – Read & organize emails 📧 🔹 **More AI Models** – Expand beyond GPT-4o 🤖
-
----
-
-## 🛡️ **Security & Permissions**
-
-✅ **Sandboxed execution** prevents harmful commands. ✅ **Permission checks** before running high-risk actions. ✅ **User-defined allowlists & blocklists** for commands.
-
----
-
-## 👨‍💻 **Contributing**
-
-Want to help improve VORTEX? Pull requests are welcome!
-
-```bash
-git checkout -b feature-new-function
-git commit -m "Added a cool new feature!"
-git push origin feature-new-function
-```
-
----
-
-## 🌟 **Credits & Inspiration**
-
-🔹 Inspired by **JARVIS from Iron Man** 🦾 🔹 Powered by **OpenAI, Whisper, FAISS & more** 🤖 🔹 Built with ❤️ by **Wizard1** ✨
-
----
-
-## 📜 **License**
-
-This project is **open-source** under the **MIT License**.
+💙 Made with Passion by Me
 
