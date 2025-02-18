@@ -1,76 +1,128 @@
-🔥 VORTEX - AI-Powered Voice Assistant
+# VORTEX: **Voice Operated Responsive Task Execution Expert**  
 
-Welcome to VORTEX – a local AI assistant designed to be fast, powerful, and completely under your control.It features text-to-speech (TTS), voice recognition, and future integrations for phone calls and automation.
+---
 
-🎯 Current Features
+![VORTEX](https://img.shields.io/badge/VORTEX-Alpha-blue?style=for-the-badge)  
+![Python](https://img.shields.io/badge/Built%20with-Python-3776AB?style=for-the-badge&logo=python)  
+![AI-Powered](https://img.shields.io/badge/AI-Powered-brightgreen?style=for-the-badge)  
 
-✅ Fast Text-to-Speech (TTS) with OpenAI's tts-1 model.✅ Wake word detection with Porcupine for hands-free activation.✅ Voice-to-text transcription using Whisper AI.✅ AI-powered conversations with OpenAI's gpt-4o.✅ Flexible command recognition for automating tasks.
+> **"A next-gen AI assistant that executes tasks, automates workflows, and seamlessly integrates with your devices."**  
 
-🚀 How to Use VORTEX
+---
 
-1️⃣ Install Dependencies
+## 🌟 **What is VORTEX?**
 
-Ensure you have Python 3.10+ installed, then run:
+VORTEX (**Voice Operated Responsive Task Execution Expert**) is an advanced AI assistant designed to process **voice and text commands** with deep system integration. Inspired by J.A.R.V.I.S., it combines **AI, automation, and real-world device control** using:
 
-pip install -r requirements.txt
+🚀 **Google Assistant API** - Execute smart queries & control Google services.  
+📱 **iOS Shortcuts API** - Send & receive texts, trigger automations remotely.  
+🖥 **PowerShell & System Commands** - Direct control over your machine.  
+🔗 **Webhooks & HTTP API** - Seamless cross-device automation.  
+🎤 **Voice & Text Input** - Use speech or type commands effortlessly.  
 
-2️⃣ Run VORTEX
+---
 
-Start the assistant:
+## ⚡ **Complete Feature List**
 
-python VORTEX.py
+✅ **Google Assistant API** - Smart searches, calendar access, automation.  
+✅ **iOS Shortcuts API** - Send & receive SMS, trigger device actions remotely.  
+✅ **Task Execution** - Runs PowerShell scripts, manages processes.  
+✅ **Memory & Context Awareness** - Stores and recalls relevant information.  
+✅ **Browser & Web Control** - Opens links, performs searches, automates web tasks.  
+✅ **Custom Voice Responses** - AI-powered TTS with emotional tones.  
+✅ **Optimized Token Usage** - Intelligent context management for efficiency.  
+✅ **Cross-Device Connectivity** - Webhooks & API for remote command execution.  
+✅ **Discord Bot Integration** - Execute VORTEX commands via Discord.  
+✅ **Secure Execution** - Permission-based system for high-risk operations.  
 
-Say the wake word, then speak naturally!
+---
 
-🔮 Planned Future Features
+## 🌐 **Seamless iPhone Integration with Shortcuts API**
 
-Two-Way Communication with iPhone via Siri Shortcuts
+🔹 **Send & Receive SMS Remotely** – VORTEX can trigger iOS Shortcuts via API to send and receive text messages.  
+🔹 **Trigger Any Shortcut from VORTEX** – Automate iPhone actions with a simple API request.  
+🔹 **Control HomeKit & Smart Devices** – Use Shortcuts to toggle lights, change settings, or launch apps.  
+🔹 **Run iOS Automations from Anywhere** – Even when VORTEX is running on a different machine.  
 
-Phone Call Handling (Making & Receiving Calls with AI Responses)
+### **💻 Trigger an iOS Shortcut from VORTEX (Example Code)**
+```python
+import requests
+IFTTT_WEBHOOK_URL = "https://maker.ifttt.com/trigger/vortex_shortcut/with/key/YOUR_IFTTT_KEY"
+requests.get(IFTTT_WEBHOOK_URL)
+```
+This allows VORTEX to **send texts, launch apps, and control iPhone settings** without direct access.  
 
-Real-Time Audio-Responsive OpenGL Visuals (Paused for now, but it's fire! 🔥)
+---
 
-Local API for External Commands & Smart Home Control
+## 🎤 **Google Assistant API: Supercharge VORTEX with Smart AI**
 
-Integration with Custom Task Automations
+With **Google Assistant API**, VORTEX can:
+✅ **Fetch Smart Responses** - Get Google-powered answers and search results.  
+✅ **Control Calendar & Tasks** - Add, remove, and modify Google Calendar events.  
+✅ **Execute Smart Home Commands** - Control Google Home devices remotely.  
+✅ **Retrieve Weather, News, & More** - Get real-time updates on demand.  
 
-Support for More Wake Words & Multi-User Profiles
+### **🔹 Example: Sending a Query to Google Assistant**
+```python
+import requests
+headers = {"Authorization": f"Bearer YOUR_ACCESS_TOKEN", "Content-Type": "application/json"}
+data = {"input": {"text": "What's the weather today?"}, "device": {"device_id": "my_device", "device_model_id": "my_model"}}
+response = requests.post("https://embeddedassistant.googleapis.com/v1alpha2/converse", headers=headers, json=data)
+print(response.json())
+```
+Now, **VORTEX can speak and act like a real assistant** using Google’s knowledge base! 🤖  
 
-Encrypted AI Conversations & Memory Retention
+---
 
-📌 Customization & Settings
+## 📁 **Project Structure**
+```plaintext
+VORTEX/
+├── VORTEX.py            # Main execution script
+├── voice.py             # Handles speech recognition & TTS
+├── boring.py            # Manages OpenAI calls & function execution
+├── capabilities.py      # Registers and loads function capabilities
+├── functions.py         # Custom tools & system commands
+├── auth.py              # Handles authentication (Google APIs)
+├── display.py           # Audio-responsive visuals (OpenGL-based)
+├── systemprompt.txt     # System prompt for AI personality & rules
+└── generated_capabilities.py  # Auto-generated functions for runtime expansion
+```
 
-Modify config.py (if it exists) or directly edit:
+---
 
-VORTEX.py – Main assistant logic.
+## 🎤 **Available Commands**
 
-voice.py – Handles wake word detection, speech recognition, and TTS.
+- `read_gmail` - Fetch unread emails from Gmail.
+- `send_email` - Send an email using Gmail.
+- `modify_email` - Mark an email as read or delete it.
+- `store_memory` - Save information to VORTEX's memory.
+- `retrieve_memory` - Retrieve stored memories.
+- `send_sms_ios` - Send SMS via iOS Shortcuts API.
+- `trigger_shortcut_ios` - Run any iOS Shortcut remotely.
+- `google_assistant_query` - Ask Google Assistant API for answers.
+- `restart_vortex` - Restart the VORTEX system.
+- `shutdown_vortex` - Shut down the assistant.
 
-boring.py – Manages OpenAI API requests.
+---
 
-display.py (Disabled, but can be re-enabled for OpenGL visuals.)
+## 🛠 **Planned Features & Development Roadmap**
 
-❓ Troubleshooting
+| Feature                                                      |
+| ------------------------------------------------------------ |
+| 🚀 **Massive Reorganization & Code Restructuring**           |
+| 🔗 **Full Google Assistant API Integration**                 |
+| 📱 **Enhanced iOS Shortcut Automations (Advanced Workflows)** |
+| 🌍 **Web Automation & Browser Control Improvements**          |
+| 🤖 **Expanded AI Memory & Smarter Context Awareness**         |
 
-If VORTEX exits immediately, try:
+Stay tuned for more updates! 🎉  
 
-python VORTEX.py --debug
+---
 
-For slow responses, consider:
+## 📝 **License**
 
-Switching TTS to streaming mode.
+VORTEX is **not open-source** and is currently for private use only. All rights reserved by **Wizard1**.  
 
-Using "gpt-3.5-turbo" instead of "gpt-4o" in boring.py.
+---
 
-Reducing silence threshold in voice.py.
-
-🎤 Why I Built This
-
-This is just for me, but damn – it's fun.VORTEX is evolving into a fully local AI that feels like JARVIS.Let's keep pushing the boundaries. 🚀🔥
-
-⚠ Disclaimer
-
-This project is purely experimental.If it accidentally calls Elon Musk, that's on you. 🤖📞💥
-
-💙 Made with Passion by Me
-
+🎤 **"Wake up, VORTEX!"** 💡 The future of AI assistants starts now!
