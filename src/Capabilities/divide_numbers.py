@@ -1,5 +1,5 @@
 # === Auto-Generated Function ===
-from src.Boring.functions import get_debug_mode
+from src.Capabilities.ALL_Default_capabilities import get_debug_mode
 
 import src.Boring.capabilities as capabilities
 

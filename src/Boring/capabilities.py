@@ -1,9 +1,7 @@
 import os
 import importlib.util
 
-# Ensure Capabilities folder exists
-CAPABILITIES_DIR = "Capabilities"
-os.makedirs(CAPABILITIES_DIR, exist_ok=True)
+
 
 # ✅ Ensure global function registry and schemas are always initialized
 if 'function_registry' not in globals():
@@ -40,29 +38,48 @@ def get_function_schemas():
     """Returns the global function schemas."""
     return function_schemas
 
-# 🔄 AUTO-LOAD FUNCTIONS FROM THE CAPABILITIES FOLDER
-for filename in os.listdir(CAPABILITIES_DIR):
-    if filename.endswith(".py") and filename != "__init__.py":
-        module_name = filename[:-3]
-        module_path = os.path.join(CAPABILITIES_DIR, filename)
-        try:
-            spec = importlib.util.spec_from_file_location(module_name, module_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+def initialize_capabilities():
+    """Clears the function registry and auto-loads all Python files in the capabilities folder."""
+    CAPABILITIES_DIR = "src/capabilities"
 
-            for func_name in dir(module):
-                func_obj = getattr(module, func_name)
-                if callable(func_obj) and func_name not in function_registry:
-                    register_function_in_registry(func_name, func_obj)
-                    print(f"[✅ REGISTERED] Auto-loaded function: {func_name}")
-        except Exception as e:
-            print(f"[❌ ERROR] Failed to load capability '{filename}': {e}")
+    # Clear the function registry
+    global function_registry
+    function_registry.clear()
+    print("Function registry cleared.")
+
+    # Auto-load functions from the capabilities folder
+    for filename in os.listdir(CAPABILITIES_DIR):
+        if filename.endswith(".py") and filename != "__init__.py":
+            module_name = filename[:-3]
+            module_path = os.path.join(CAPABILITIES_DIR, filename)
+            try:
+                print(f"Loading module: {module_name}")
+                spec = importlib.util.spec_from_file_location(module_name, module_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                for func_name in dir(module):
+                    func_obj = getattr(module, func_name)
+                    if callable(func_obj) and func_name not in function_registry:
+                        print(f"Registering function: {func_name}")
+                        register_function_in_registry(func_name, func_obj)
+            except Exception as e:
+                print(f"Failed to load module '{filename}': {e}")
 
 def persist_dynamic_function(function_name, function_code):
     """Writes a dynamically registered function to a separate file in the Capabilities folder."""
-    function_file = os.path.join(CAPABILITIES_DIR, f"{function_name}.py")
+
+    # Determine the path to the 'Capabilities' folder inline
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    capabilities_folder = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "Capabilities"))
+
+    # Ensure the Capabilities folder exists
+    if not os.path.exists(capabilities_folder):
+        os.makedirs(capabilities_folder, exist_ok=True)
+
+    # Save the function to a new file in the Capabilities folder
+    function_file = os.path.join(capabilities_folder, f"{function_name}.py")
     with open(function_file, "w", encoding="utf-8") as f:
         f.write(function_code)
     print(f"[💾 PERSIST] Function '{function_name}' saved to '{function_file}'")
-
 

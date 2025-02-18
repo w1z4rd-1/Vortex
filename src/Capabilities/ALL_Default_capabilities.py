@@ -63,9 +63,7 @@ TEMP_DIR = os.path.join(os.getenv("TEMP", "/tmp"), "VORTEX")
 os.makedirs(TEMP_DIR, exist_ok=True)  # Ensure the directory exists
 TEMP_IMAGE_PATH = os.path.join(TEMP_DIR, "screenshot.png")  # Path for saving screenshots
 # Debug mode function
-ALLOWED_FILES = [
-    "VORTEX.py", "boring.py", "functions.py", "voice.py", "auth.py", "build.py", "capabilities.py"
-]
+
 CAPABILITIES_FILE = "capabilities.py"
 
 def retrieve_project_memory(query: str):
@@ -75,13 +73,39 @@ def retrieve_project_memory(query: str):
     return project_memories + created_functions  # ✅ Merge both for better context
 
 
-import openai
-import os
-import importlib.util
-import re
 import src.Boring.capabilities as capabilities
 
+def delete_capability(capability_name_or_file: str, get_function_registry):
+    """
+    Deletes a capability by name or by file, ensuring no external files are affected.
+    After removal, it reinitializes capabilities to ensure consistency.
 
+    Parameters:
+        capability_name_or_file (str): The name of the capability or the filename to delete.
+        get_function_registry (callable): Function to retrieve the current function registry.
+    """
+    CAPABILITIES_DIR = "capabilities"
+    DEFAULT_CAPABILITIES_FILE = "all_default_capabilities.py"
+
+    # Validate and ensure we’re only working within the capabilities folder
+    file_path = os.path.join(CAPABILITIES_DIR, capability_name_or_file)
+    if capability_name_or_file == DEFAULT_CAPABILITIES_FILE or not os.path.commonpath([os.path.abspath(file_path), os.path.abspath(CAPABILITIES_DIR)]) == os.path.abspath(CAPABILITIES_DIR):
+        return f"❌ Error: Cannot delete '{capability_name_or_file}' because it is not allowed or is outside the capabilities folder."
+
+    # Check if it's a registered capability
+    registry = get_function_registry()
+    if capability_name_or_file in registry:
+        del registry[capability_name_or_file]  # Remove from registry
+
+    # If it’s a file, attempt to delete
+    if os.path.isfile(file_path):
+        try:
+            os.remove(file_path)
+            return f"✅ Deleted capability file: {file_path}"
+        except Exception as e:
+            return f"❌ Error deleting capability file: {e}"
+
+    return f"❌ Could not find or delete: {capability_name_or_file}"
 def add_new_capability(function_name: str, function_code: str):
     """
     Adds a new capability function to its own file in src/Capabilities/ and registers it dynamically.
@@ -217,16 +241,42 @@ def query_wolfram_alpha(query: str) -> dict:
 
 
 
-def read_vortex_code(filename: str):
-    """Reads and returns the contents of any file in the project directory or subdirectories."""
-    if not os.path.exists(filename):
-        return f"❌ Error: '{filename}' does not exist."
+
+
+def read_vortex_code(filename: str, max_file_size: int = 5000):
+    """Reads and returns the contents of any file in the src directory or its subdirectories.
+    Also displays a directory tree of the src folder."""
+    
+    def generate_tree(directory, prefix=""):
+        tree = ""
+        entries = sorted(os.listdir(directory))[:50]  # Limit number of entries
+        for index, entry in enumerate(entries):
+            path = os.path.join(directory, entry)
+            connector = "|-- " if index != len(entries) - 1 else "\-- "
+            tree += prefix + connector + entry + "\n"
+            if os.path.isdir(path):
+                tree += generate_tree(path, prefix + "|   ")
+        return tree
+    
+    src_dir = os.path.join(os.getcwd(), "src")
+    if not os.path.exists(src_dir):
+        return f"❌ Error: 'src' directory does not exist."
+    
+    directory_tree = f"Source Directory Structure:\n{generate_tree(src_dir)}"
+    
+    full_path = os.path.join(src_dir, filename)
+    if not os.path.exists(full_path):
+        return f"❌ Error: '{filename}' does not exist in the src directory.\n\n" + directory_tree
     
     try:
-        with codecs.open(filename, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
+        with codecs.open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            file_contents = f.read(max_file_size)  # Limit file size to avoid excessive tokens
+        truncated_notice = "\n\n⚠️ File content truncated to avoid token overflow." if os.path.getsize(full_path) > max_file_size else ""
+        return f"{directory_tree}\n\n--- File Contents ({filename}) ---\n{file_contents}{truncated_notice}"
     except Exception as e:
-        return f"❌ Error reading {filename}: {e}"
+        return f"❌ Error reading {filename}: {e}\n\n" + directory_tree
+
+
 def set_debug_mode(enable: bool = None):
     """Enables or disables debug mode."""
     print("FUNCTION RAN")
@@ -1637,7 +1687,7 @@ capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "read_vortex_code",
-        "description": "Reads and returns the contents of a VORTEX source file. if any function or capability runs into an error, please use this to try to help debug the error, or even provide the user with the fix!",
+        "description": "Reads and returns the contents of any file in the vortex project directory! if any function or capability runs into an error, please use this to try to help debug the error, or even provide the user with the fix! any time this is ran it also returns a Tree of all the files and directorys in the project directory",
         "parameters": {
             "type": "object",
             "properties": {
