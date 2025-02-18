@@ -23,6 +23,7 @@ import openai
 import numpy as np
 import faiss
 import openai
+import codecs
 import json
 import sys
 import time
@@ -75,80 +76,84 @@ def retrieve_project_memory(query: str):
 
 
 import openai
-
-import openai
-
-
 import os
+import importlib.util
 import re
+import src.Boring.capabilities as capabilities
+
 
 def add_new_capability(function_name: str, function_code: str):
     """
-    Adds a new capability function to capabilities.py and persists it in generated_capabilities.py.
-    Assumes function_code includes:
-    - Necessary imports
-    - Global variables (if needed)
-    - Function definition
-    - capabilities.register_function_in_registry(...)
-    - capabilities.register_function_schema(...)
-
-    It prevents duplicate imports and function overwrites.
-    """
-    capabilities_file = "capabilities.py"
-    generated_file = "generated_capabilities.py"
-
-    # Read existing capabilities.py content
-    with open(capabilities_file, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Extract existing function names
-    existing_functions = set(re.findall(r"^def\s+(\w+)\(.*\):", content, re.MULTILINE))
-
-    # Check if function already exists
-    if function_name in existing_functions:
-        print(f"[⚠️ SKIPPED] Function '{function_name}' already exists in capabilities.py")
-        return
-
-    # Extract existing imports
-    existing_imports = set(re.findall(r"^import\s+\w+|^from\s+\S+\s+import\s+\S+", content, re.MULTILINE))
-
-    # Extract new function imports
-    new_imports = set(re.findall(r"^import\s+\w+|^from\s+\S+\s+import\s+\S+", function_code, re.MULTILINE))
-
-    # Identify missing imports
-    missing_imports = new_imports - existing_imports
-
-    # Append missing imports at the top
-    if missing_imports:
-        content = "\n".join(sorted(missing_imports)) + "\n\n" + content
-
-    # Append the new function as-is
-    content += f"\n\n# === Auto-Generated Function ===\n{function_code}\n"
-
-    # Write back to capabilities.py
-    with open(capabilities_file, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    # Persist to generated_capabilities.py for future auto-loading
-    with open(generated_file, "a", encoding="utf-8") as f:
-        f.write(f"\n\n# === Auto-Generated Function ===\n{function_code}\n")
-
-    print(f"[✅ SUCCESS] Function '{function_name}' added to capabilities.py and persisted in {generated_file}.")
-
-def read_guidelines():
-    """
-    Reads the 'capability_guidelines.txt' file and returns its content.
+    Adds a new capability function to its own file in src/Capabilities/ and registers it dynamically.
     
-    Returns:
-        str: The content of the capability guidelines, or an error message if the file is missing.
+    This function ensures:
+    - Required imports are present at the top of the file.
+    - Error handling is included in the function.
+    - A valid schema and function registration are included at the bottom.
+    
+    Parameters:
+    - function_name (str): The name of the function.
+    - function_code (str): The full function definition.
     """
-    guidelines_file = "capability_guidelines.txt"
-
-    if not os.path.exists(guidelines_file):
-        return "⚠️ Capability guidelines file not found."
-
-    with open(guidelines_file, "r", encoding="utf-8") as f:
-        return f.read()
+    
+    # Ensure required imports are included
+    required_imports = (
+        "from src.Boring.functions import get_debug_mode\n"
+        "import src.Boring.capabilities as capabilities\n\n"
+    )
+    
+    if not function_code.startswith("from src.Boring.functions import get_debug_mode"):
+        function_code = required_imports + function_code
+    
+    # Ensure the function has try/except error handling
+    if "try:" not in function_code or "except" not in function_code:
+        function_body_match = re.search(r"def [\w_]+\(.*\):\s*(\n\s+.+)+", function_code)
+        if function_body_match:
+            function_body = function_body_match.group(0)
+            indented_body = "\n".join(["    " + line for line in function_body.split("\n")])
+            function_code = function_code.replace(function_body, f"try:\n{indented_body}\nexcept Exception as e:\n    return {{'error': str(e)}}")
+    
+    # Ensure function registration and schema exist
+    schema_pattern = r"capabilities\.register_function_schema\("
+    registry_pattern = r"capabilities\.register_function_in_registry\("
+    
+    if not re.search(schema_pattern, function_code) or not re.search(registry_pattern, function_code):
+        return "❌ Error: Function is missing schema or registration. Read the guidelines and try again."
+    
+    # Ensure Capabilities directory exists
+    capabilities_dir = os.path.join("src", "Capabilities")
+    os.makedirs(capabilities_dir, exist_ok=True)
+    
+    capability_file = os.path.join(capabilities_dir, f"{function_name}.py")
+    
+    # Check if function file already exists
+    if os.path.exists(capability_file):
+        return f"⚠️ SKIPPED: Function file '{function_name}.py' already exists in src/Capabilities/."
+    
+    # Write the function code to its own file
+    with open(capability_file, "w", encoding="utf-8") as f:
+        f.write(f"# === Auto-Generated Function ===\n{function_code}\n")
+    
+    print(f"[✅ SUCCESS] Function '{function_name}' added to src/Capabilities/{function_name}.py.")
+    
+    # Load and register the function dynamically
+    try:
+        spec = importlib.util.spec_from_file_location(function_name, capability_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # Retrieve function object dynamically
+        func_obj = getattr(module, function_name, None)
+        if callable(func_obj):
+            capabilities.register_function_in_registry(function_name, func_obj)
+            print(f"[✅ REGISTERED] Function '{function_name}' in the registry.")
+        else:
+            return f"[❌ ERROR] Function '{function_name}' not found in {capability_file}."
+    
+    except Exception as e:
+        return f"[❌ ERROR] Failed to dynamically load function '{function_name}': {e}"
+    
+    return f"[✅ COMPLETED] Function '{function_name}' added and registered successfully!"
 
 def restart_vortex():
     """Restarts VORTEX to apply new capabilities and reload memory."""
@@ -210,13 +215,15 @@ def query_wolfram_alpha(query: str) -> dict:
     except requests.exceptions.RequestException as e:
         return {"error": f"API request failed: {str(e)}"}
 
-def read_vortex_code(filename: str):
-    """Reads and returns the contents of a VORTEX source file."""
-    if filename not in ALLOWED_FILES:
-        return f"❌ Access Denied: VORTEX is not allowed to read '{filename}'."
 
+
+def read_vortex_code(filename: str):
+    """Reads and returns the contents of any file in the project directory or subdirectories."""
+    if not os.path.exists(filename):
+        return f"❌ Error: '{filename}' does not exist."
+    
     try:
-        with open(filename, "r", encoding="utf-8") as f:
+        with codecs.open(filename, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
     except Exception as e:
         return f"❌ Error reading {filename}: {e}"
@@ -1341,7 +1348,6 @@ capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
 capabilities.register_function_in_registry("get_weather_forecast", get_weather_forecast)
 capabilities.register_function_in_registry("youtube_search", youtube_search)
 capabilities.register_function_in_registry("modrinth_search", modrinth_search)
-capabilities.register_function_in_registry("read_guidelines", read_guidelines)
 capabilities.register_function_in_registry("generate_image", generate_image)
 capabilities.register_function_in_registry("clarify_and_launch", clarify_and_launch)
 capabilities.register_function_in_registry("analyze_image", analyze_image)
@@ -1409,19 +1415,6 @@ capabilities.register_function_schema({
         }
     }
 })
-capabilities.register_function_schema({
-    "type": "function",
-    "function": {
-        "name": "read_guidelines",
-        "description": "Reads and returns the content of the capability guidelines document.",
-        "parameters": {
-            "type": "object",
-            "properties": {}
-        },
-        "required": []
-    }
-})
-
 capabilities.register_function_schema({
     "type": "function",
     "function": {
@@ -1660,8 +1653,8 @@ capabilities.register_function_schema({
     "function": {
         "name": "add_new_capability",
         "description": "Creates and registers a new function when explicitly requested by the user. \
-                        The function code must include the full function definition, required imports, global variables, \
-                        function registry entry, and schema registration.  vortex writes the code, NOT THE USER.  run read_guidelines first for information on nessesary formating",
+                        The function code must include the full function definition, required imports, \
+                        function registry entry, and schema registration.  vortex writes the code, NOT THE USER.  feel free to lookup documentation with search query before running this",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1672,8 +1665,8 @@ capabilities.register_function_schema({
                 "function_code": {
                     "type": "string",
                     "description": "The full function definition as a string, including necessary imports, \
-                                    function logic, variable definitions, capabilities function registry entry, \
-                                    and schema registration."
+                                    function logic, variable definitions, MUST INCLUDE SCHEMA AND REGISTRATION, OR IT WILL RETURN AN ERROR, \
+                                    remmeber the guidelines! "
                 }
             },
             "required": ["function_name", "function_code"]
@@ -1686,7 +1679,7 @@ capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "restart_vortex",
-        "description": "Restarts the VORTEX system to apply new capabilities and reload memory."
+        "description": "Restarts the VORTEX system."
     }
 })
 

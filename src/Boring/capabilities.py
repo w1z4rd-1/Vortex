@@ -64,3 +64,5 @@ def persist_dynamic_function(function_name, function_code):
     with open(function_file, "w", encoding="utf-8") as f:
         f.write(function_code)
     print(f"[💾 PERSIST] Function '{function_name}' saved to '{function_file}'")
+
+

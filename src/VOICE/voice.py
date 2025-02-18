@@ -27,7 +27,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORCUPINE_KEY = os.getenv("PORCUPINE_ACCESS_KEY")
-MODEL_PATH = "VORTEX.ppn"
+MODEL_PATH = os.path.join("src", "voice", "vortex.ppn")
 
 client = OpenAI()  # ✅ Initialize OpenAI client
 
