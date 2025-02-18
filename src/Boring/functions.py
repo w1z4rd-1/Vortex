@@ -1,6 +1,6 @@
 import requests
 from datetime import datetime, timedelta, timezone
-from auth import authorize
+from src.Google.auth import authorize
 from googleapiclient.discovery import build
 import subprocess
 import os
@@ -8,13 +8,12 @@ import importlib
 import tempfile
 import glob
 import ctypes
-from auth import authorize
+from src.Google.auth import authorize
 from ctypes import wintypes
 import markdown
 import webbrowser
 import wikipediaapi
 import json
-import base64
 from email.mime.text import MIMEText
 from googleapiclient.discovery import build
 import re
@@ -29,7 +28,9 @@ import sys
 import time
 import openai
 import asyncio
-import capabilities
+import src.Boring.capabilities as capabilities
+import base64
+import googleapiclient.errors
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 MEMORY_FILE = "memory.json"
 debug_mode = False
@@ -1234,63 +1235,95 @@ def categorize_memory(text):
         return "general"  # ✅ Safe fallback category
 
 
+
 def read_gmail(count: int = 5):
     """Fetches unread emails from Gmail and returns a summary."""
     try:
-        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+        creds = authorize()
+        if not creds:
+            return "❌ Error: Unable to authenticate with Gmail API."
+        
+        service = build("gmail", "v1", credentials=creds)
 
-        results = service.users().messages().list(userId="me", labelIds=["INBOX"], q="is:unread", maxResults=count).execute()
+        results = service.users().messages().list(
+            userId="me", labelIds=["INBOX"], q="is:unread", maxResults=count
+        ).execute()
+
         messages = results.get("messages", [])
+        if not messages:
+            return "✅ No unread emails."
 
         email_summaries = []
         for msg in messages:
             msg_data = service.users().messages().get(userId="me", id=msg["id"]).execute()
-            headers = msg_data["payload"]["headers"]
-            
+            headers = msg_data.get("payload", {}).get("headers", [])
+
             subject = next((h["value"] for h in headers if h["name"] == "Subject"), "No Subject")
             sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown Sender")
-            
+
             email_summaries.append(f"📩 **From:** {sender} | **Subject:** {subject}")
 
-        return "\n".join(email_summaries) if email_summaries else "✅ No unread emails."
-    
+        return "\n".join(email_summaries)
+
+    except googleapiclient.errors.HttpError as e:
+        return f"❌ Gmail API Error: {e.reason}"
     except Exception as e:
-        return f"❌ Gmail API Error: {str(e)}"
-    
+        return f"❌ Unexpected Error: {str(e)}"
+
+
 def send_email(to: str, subject: str, body: str):
     """Sends an email using Gmail API."""
     try:
-        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+        creds = authorize()
+        if not creds:
+            return "❌ Error: Unable to authenticate with Gmail API."
+
+        service = build("gmail", "v1", credentials=creds)
 
         message = MIMEText(body)
         message["to"] = to
         message["subject"] = subject
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
 
-        send_result = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
-        return f"✅ Email sent to {to} (ID: {send_result['id']})"
-    
+        send_result = service.users().messages().send(
+            userId="me", body={"raw": raw_message}
+        ).execute()
+
+        return f"✅ Email sent to {to} (ID: {send_result.get('id')})"
+
+    except googleapiclient.errors.HttpError as e:
+        return f"❌ Gmail API Error: {e.reason}"
     except Exception as e:
         return f"❌ Error sending email: {str(e)}"
+
 
 def modify_email(email_id: str, action: str):
     """Marks an email as read or deletes it."""
     try:
-        service = build("gmail", "v1", credentials=authorize())  # Use correct auth function
+        creds = authorize()
+        if not creds:
+            return "❌ Error: Unable to authenticate with Gmail API."
+
+        service = build("gmail", "v1", credentials=creds)
 
         if action == "read":
-            service.users().messages().modify(userId="me", id=email_id, body={"removeLabelIds": ["UNREAD"]}).execute()
+            service.users().messages().modify(
+                userId="me", id=email_id, body={"removeLabelIds": ["UNREAD"]}
+            ).execute()
             return f"✅ Email {email_id} marked as read."
 
         elif action == "delete":
-            service.users().messages().delete(userId="me", id=email_id).execute()
-            return f"🗑️ Email {email_id} deleted."
+            service.users().messages().trash(userId="me", id=email_id).execute()
+            return f"🗑️ Email {email_id} moved to trash."
 
         else:
             return "❌ Invalid action. Use 'read' or 'delete'."
-    
+
+    except googleapiclient.errors.HttpError as e:
+        return f"❌ Gmail API Error: {e.reason}"
     except Exception as e:
         return f"❌ Email modification error: {str(e)}"
+
     
 capabilities.register_function_in_registry("read_gmail", read_gmail)
 capabilities.register_function_in_registry("send_email", send_email)

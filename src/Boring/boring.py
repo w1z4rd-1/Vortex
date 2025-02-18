@@ -4,12 +4,12 @@ import os
 import asyncio
 import inspect
 from dotenv import load_dotenv
-from capabilities import get_function_registry, get_function_schemas
+from src.Boring.capabilities import get_function_registry, get_function_schemas
 # Import dynamic capabilities and helper functions.
-import capabilities  # This module should provide:
+import src.Boring.capabilities as capabilities  # This module should provide:
                      # - get_function_schemas(): returns function schemas (or None if none)
                      # - get_function_registry(): returns a dict mapping function names to callables.
-from functions import set_debug_mode, get_debug_mode, retrieve_memory, read_vortex_code
+from src.Boring.functions import set_debug_mode, get_debug_mode, retrieve_memory, read_vortex_code
 #from display import display
 # ------------------------------
 # VORTEX Version & Environment Setup

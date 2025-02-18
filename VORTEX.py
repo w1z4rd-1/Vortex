@@ -2,10 +2,20 @@ print("Initializing VORTEX...")
 import asyncio
 import os
 import threading
+import sys
+
+# Add the src directory to Python's module search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Now, import your modules
+from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
+from src.Boring.boring import call_openai, add_user_input, display_startup_message
+from src.Boring.functions import get_debug_mode
+
 import time
-from voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
-from boring import call_openai, add_user_input, display_startup_message
-from functions import get_debug_mode
+from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
+from src.Boring.boring import call_openai, add_user_input, display_startup_message
+from src.Boring.functions import get_debug_mode
 
 # ANSI Color Codes for Terminal Output
 COLOR_BLUE = "\033[94m"

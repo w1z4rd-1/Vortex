@@ -17,7 +17,7 @@ from scipy.fftpack import fft
 from dotenv import load_dotenv
 import warnings
 #from display import display
-from functions import set_debug_mode, get_debug_mode
+from src.Boring.functions import set_debug_mode, get_debug_mode
 from pydub import AudioSegment
 
 # Suppress warnings
