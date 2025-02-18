@@ -10,12 +10,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # Now, import your modules
 from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
 from src.Boring.boring import call_openai, add_user_input, display_startup_message
-from src.Boring.functions import get_debug_mode
-
+from src.Capabilities.ALL_Default_capabilities import get_debug_mode
+from src.Boring.capabilities import initialize_capabilities
 import time
-from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
-from src.Boring.boring import call_openai, add_user_input, display_startup_message
-from src.Boring.functions import get_debug_mode
 
 # ANSI Color Codes for Terminal Output
 COLOR_BLUE = "\033[94m"
@@ -36,7 +33,6 @@ async def process_input(user_input):
 async def main():
     mode = "text"  # Start in text mode by default.
     previous_mode = mode  # ✅ Track previous mode to detect changes
-
     while True:
         if mode == "text":
             user_input = input("You: ").strip()
@@ -86,8 +82,8 @@ async def main():
                 tts_speak(response)  # ✅ Speak only VORTEX's response
 
 if __name__ == "__main__":
-    os.system('cls')
-
+    # os.system('cls')
+    initialize_capabilities()
     display_startup_message()
 
     # ✅ Start AI loop in a background thread
@@ -95,7 +91,6 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(main())
-
     ai_thread = threading.Thread(target=run_asyncio, daemon=True)
     ai_thread.start()
 
