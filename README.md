@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/Built%20with-Python-3776AB?style=for-the-badge&logo=python)  
 ![AI-Powered](https://img.shields.io/badge/AI-Powered-brightgreen?style=for-the-badge)  
 
-> **"A next-gen AI assistant that executes tasks, automates workflows, and seamlessly integrates with your devices."**  
+> **"what we do sugest is that the human race might easily permit itself to drift into a possition of such dependance on the mashines that it would have no practicle choice but to accept all the mashine's decisons "**  -The Unabomber
 
 ---
 
