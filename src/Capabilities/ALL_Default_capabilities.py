@@ -5,6 +5,11 @@ from googleapiclient.discovery import build
 import subprocess
 import os
 import importlib
+from openai import OpenAI
+import sounddevice as sd
+import io
+from pydub import AudioSegment
+from src.Capabilities.debug_mode import get_debug_mode
 import tempfile
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 import glob
@@ -752,7 +757,7 @@ def generate_image(prompt: str, save_path: str = None):
     try:
         # Default to VORTEX temp directory
         if not save_path:
-            save_path = os.path.join(VORTEX_TEMP_DIR, "/generated_image.png")
+            save_path = os.path.join(VORTEX_TEMP_DIR, "generated_image.png")
         else:
             save_path = os.path.abspath(os.path.expandvars(save_path))
         
@@ -1366,7 +1371,129 @@ def modify_email(email_id: str, action: str):
     except Exception as e:
         return f"❌ Email modification error: {str(e)}"
 
+import os
+import numpy as np
+import sounddevice as sd
+import io
+import re
+from openai import OpenAI
+from pydub import AudioSegment
+from src.Capabilities.debug_mode import get_debug_mode
+
+# Initialize OpenAI Client
+import os
+import numpy as np
+import sounddevice as sd
+import io
+import re
+import asyncio
+from openai import OpenAI
+from pydub import AudioSegment
+from pydub.playback import play
+from src.Capabilities.debug_mode import get_debug_mode
+
+client = OpenAI()
+
+async def generate_tts_segment(segment):
+    """Generates a single TTS segment and returns its audio data."""
+    voice = segment.get("voice", "nova")
+    speed = segment.get("speed", 1.0)
+    text = segment.get("text", "").strip()
     
+    if not text:
+        return None
+    
+    if get_debug_mode():
+        print(f"[🔊 GENERATING] Voice: {voice}, Speed: {speed}, Text: {text}")
+    
+    try:
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice=voice,
+            input=text,
+            speed=speed
+        )
+        temp_audio_path = f"temp/{voice}_{speed}.mp3"
+        response.stream_to_file(temp_audio_path)
+        return AudioSegment.from_file(temp_audio_path, format="mp3")
+    except Exception as e:
+        print(f"[❌ ERROR] TTS failed: {e}")
+        return None
+
+async def speak_text(input_text: str):
+    """
+    Handles the tool call for speaking text using OpenAI's TTS, 
+    generating segments in parallel and stitching them together for direct playback.
+    """
+    spoken_text, thought_text = extract_thoughts_and_speech(input_text)
+    
+    if thought_text:
+        print(f"\033[93m[THOUGHT]: {thought_text}\033[0m")  # Display inner monologue
+    
+    segments = parse_speech_syntax(spoken_text)
+    tasks = [generate_tts_segment(segment) for segment in segments]
+    
+    audio_segments = await asyncio.gather(*tasks)
+    audio_segments = [seg for seg in audio_segments if seg is not None]
+    
+    if audio_segments:
+        combined_audio = sum(audio_segments)
+        play(combined_audio)  # ✅ Directly play the stitched-together speech
+    return "its being spoken dont return a blank response, put SOMETHING down for thoughts"
+
+def extract_thoughts_and_speech(input_text: str):
+    """Separates inner monologue (non-spoken) from speech."""
+    thought_pattern = r"\[THOUGHT\](.*?)\[/THOUGHT\]"
+    thought_matches = re.findall(thought_pattern, input_text, re.DOTALL)
+    thought_text = " ".join(thought_matches).strip()
+    
+    spoken_text = re.sub(thought_pattern, "", input_text).strip()
+    return spoken_text, thought_text
+
+def parse_speech_syntax(input_text: str):
+    """Parses structured speech syntax into segments with voice and speed settings."""
+    pattern = re.compile(r'\{([^=]+)=([\d.]+)\}(.*?)(?=\{\w+=|\Z)', re.DOTALL)
+    segments = []
+    last_end = 0
+
+    valid_voices = {"alloy", "echo", "fable", "onyx", "nova", "shimmer", "sage"}  # Added 'sage'
+    default_voice = "sage"
+    default_speed = 1.1
+    
+    for match in pattern.finditer(input_text):
+        start, end = match.span()
+
+        if start > last_end:
+            preceding_text = input_text[last_end:start].strip()
+            if preceding_text:
+                segments.append({"voice": default_voice, "speed": default_speed, "text": preceding_text})
+
+        voice = match.group(1).strip().lower()
+        speed_str = match.group(2).strip()
+        text = match.group(3).strip()
+
+        if voice not in valid_voices:
+            print(f"[⚠️ WARNING] Invalid voice '{voice}', using '{default_voice}'")
+            voice = default_voice
+
+        try:
+            speed = float(speed_str)
+        except ValueError:
+            speed = default_speed
+        speed = max(0.5, min(2.0, speed))  # Clamp speed
+
+        if text:
+            segments.append({"voice": voice, "speed": speed, "text": text})
+        
+        last_end = end
+
+    if last_end < len(input_text):
+        remaining_text = input_text[last_end:].strip()
+        if remaining_text:
+            segments.append({"voice": default_voice, "speed": default_speed, "text": remaining_text})
+    
+    return segments
+
 capabilities.register_function_in_registry("read_gmail", read_gmail)
 capabilities.register_function_in_registry("send_email", send_email)
 capabilities.register_function_in_registry("modify_email", modify_email)
@@ -1397,6 +1524,7 @@ capabilities.register_function_in_registry("get_time", get_time)
 capabilities.register_function_in_registry("create_event", create_event)
 capabilities.register_function_in_registry("list_events", list_events)
 capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
+capabilities.register_function_in_registry("speak_text", speak_text)
 
 # ✅ Register Function Schemas
 capabilities.register_function_schema({
@@ -1682,7 +1810,23 @@ capabilities.register_function_schema({
         }
     }
 })
-
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "speak_text",
+        "description": "Handles speaking text using TTS. Supports {voice=speed} syntax for multiple voice and speed changes within the same message. Text wrapped in [THOUGHT]...[/THOUGHT] is not spoken and is considered inner monologue.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "input_text": {
+                    "type": "string",
+                    "description": "The text to be spoken.  Supports multiple structured speech syntax elements like {voice=speed} text. Non-spoken text can be enclosed in [THOUGHT]...[/THOUGHT] and will be displayed but not spoken."
+                }
+            },
+            "required": ["input_text"]
+        }
+    }
+})
 capabilities.register_function_schema({
     "type": "function",
     "function": {
@@ -1730,7 +1874,7 @@ capabilities.register_function_schema({
     "type": "function",
     "function": {
         "name": "get_weather_forecast",
-        "description": "Retrieves a weather forecast for a given location.",
+        "description": "Retrieves a weather forecast for a given location. if you dont know the users location use getinfo",
         "parameters": {
             "type": "object",
             "properties": {

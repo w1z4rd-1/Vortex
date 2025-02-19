@@ -95,7 +95,7 @@ async def call_openai():
         try:
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4o",  # ✅ Switched to GPT-4o for better function handling
                     messages=conversation_history,
                     tools=function_schemas,
                     tool_choice=tool_choice_param,
@@ -115,71 +115,61 @@ async def call_openai():
         if get_debug_mode():
             print(f"[🤖 OPENAI RESPONSE] {assistant_message.content}")
 
+        # ✅ Ensure function calls get a response
+        if assistant_message.tool_calls:
+            tool_responses = []
+            for tool_call in assistant_message.tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+                function_call_id = tool_call.id
+
+                if get_debug_mode():
+                    print(f"[🛠 TOOL CALL DETECTED] Function: {function_name} | Args: {function_args}")
+
+                function_to_call = get_function_registry().get(function_name)
+                if not function_to_call:
+                    print(f"[❌ MISSING FUNCTION] '{function_name}' not found.")
+                    continue
+
+                try:
+                    if inspect.iscoroutinefunction(function_to_call):
+                        function_result = await function_to_call(**function_args)
+                    else:
+                        function_result = function_to_call(**function_args)
+
+                    if get_debug_mode():
+                        print(f"[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}")
+
+                    tool_responses.append({
+                        "role": "tool",
+                        "tool_call_id": function_call_id,
+                        "content": json.dumps(function_result)
+                    })
+
+                except Exception as e:
+                    print(f"[❌ FUNCTION ERROR] {function_name}: {e}")
+                    tool_responses.append({
+                        "role": "tool",
+                        "tool_call_id": function_call_id,
+                        "content": json.dumps({"error": f"Execution failed: {str(e)}"})
+                    })
+
+            # ✅ Append tool responses and RESEND to OpenAI
+            conversation_history.extend(tool_responses)
+            continue  # ✅ Retry OpenAI with updated history
+
+        # ✅ If response has content, return it
         if assistant_message.content:
             print(f"{COLOR_BLUE}[🤖 VORTEX]: {assistant_message.content}{COLOR_RESET}")
-            return assistant_message.content  # ✅ Return response text
-        elif assistant_message.tool_calls:
-            if get_debug_mode():
-                print("[🛠 TOOL CALL ONLY] OpenAI returned tool calls without message content.")
-        else:
-            print("[❌ ERROR] OpenAI returned an empty response!")
+            return assistant_message.content
 
-        if not assistant_message.tool_calls:
-            break
-
-        tool_responses = []
-        for tool_call in assistant_message.tool_calls:
-            function_name = tool_call.function.name
-            function_args = json.loads(tool_call.function.arguments)
-            function_call_id = tool_call.id
-
-            if get_debug_mode():
-                print(f"[🔄 CHECKING FUNCTION] ID: {tool_call.id} | Name: {function_name}")
-
-            function_to_call = get_function_registry().get(function_name)
-            if not function_to_call:
-                print(f"[❌ MISSING FUNCTION] '{function_name}' not found.")
-
-                similar_functions = [f for f in get_function_registry().keys() if function_name.lower() in f]
-                if similar_functions:
-                    print(f"[💡 SUGGESTED FIX] Did you mean: {', '.join(similar_functions)}?")
-                continue
-
-            try:
-                if get_debug_mode():
-                    print(f"[🚀 EXECUTING] Running {function_name}({json.dumps(function_args)})")
-                if inspect.iscoroutinefunction(function_to_call):
-                    function_result = await function_to_call(**function_args)
-                else:
-                    function_result = function_to_call(**function_args)
-
-                if function_name == "debugmode":
-                    print(f"[🛠 DEBUG MODE] New state: {'ON' if get_debug_mode() else 'OFF'}")
-
-                if get_debug_mode():
-                    print(f"[✅ FUNCTION SUCCESS] {function_name} returned: {json.dumps(function_result)}")
-
-                tool_responses.append({
-                    "role": "tool",
-                    "tool_call_id": function_call_id,
-                    "content": json.dumps(function_result)
-                })
-            except Exception as e:
-                if get_debug_mode():
-                    print(f"[❌ FUNCTION ERROR] {function_name}: {e}")
-                tool_responses.append({
-                    "role": "tool",
-                    "tool_call_id": function_call_id,
-                    "content": json.dumps({"error": f"Execution failed: {str(e)}"})
-                })
-
-        conversation_history.extend(tool_responses)  # ✅ Append tool responses and retry
-        continue
+        # 🔴 If no message and no tool call, something went wrong
+        print("[❌ ERROR] OpenAI returned an empty response!")
+        return "I'm sorry, I couldn't process that request."
 
     if get_debug_mode():
         print("[🛑 EXITING] Finalizing response; no further function calls.")
     return "I'm sorry, but I encountered an issue processing your request."
-
 # ------------------------------
 # Conversation History Helpers
 # ------------------------------

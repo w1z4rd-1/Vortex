@@ -8,7 +8,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Now, import your modules
-from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
+from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio
+from src.Capabilities.ALL_Default_capabilities import speak_text
 from src.Boring.boring import call_openai, add_user_input, display_startup_message
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 from src.Boring.capabilities import initialize_capabilities
@@ -22,13 +23,11 @@ COLOR_RESET = "\033[0m"
 
 async def process_input(user_input):
     """
-    Calls OpenAI's API, gets the full response, and speaks it.
+    Calls OpenAI's API
     """
     add_user_input(user_input)
-    response = await call_openai()  # ✅ AI waits for full response before speaking
-
-    if response:
-        tts_speak(response)  # ✅ Speak full response after receiving it
+    add_user_input(user_input)
+    response = await call_openai()
 
 async def main():
     mode = "text"  # Start in text mode by default.
@@ -42,7 +41,7 @@ async def main():
                 message = "Voice mode activated. Please speak..."
                 if get_debug_mode():
                     print(message)  # ✅ Show only in debug mode
-                tts_speak(message)  # ✅ Speak mode change
+                speak_text(message)  # ✅ Speak mode change
             
             if detect_wake_word():
                 audio_file = record_audio()
@@ -55,7 +54,7 @@ async def main():
                     error_message = "No voice input detected."
                     if get_debug_mode():
                         print(error_message)  # ✅ Show only in debug mode
-                    tts_speak(error_message)  # ✅ Speak error message
+                    speak_text(error_message)  # ✅ Speak error message
                     continue  
 
         # ✅ Update previous mode to track changes
@@ -65,7 +64,7 @@ async def main():
             shutdown_message = "Shutting down VORTEX."
             if get_debug_mode():
                 print(shutdown_message)  # ✅ Show only in debug mode
-            tts_speak(shutdown_message)  # ✅ Speak shutdown message
+            speak_text(shutdown_message)  # ✅ Speak shutdown message
             break
         
         if user_input.lower() == "toggle":
@@ -73,13 +72,13 @@ async def main():
             toggle_message = f"Mode switched to {mode.upper()}."
             if get_debug_mode():
                 print(toggle_message)  # ✅ Show only in debug mode
-            tts_speak(toggle_message)  # ✅ Speak mode change
+            speak_text(toggle_message)  # ✅ Speak mode change
             continue  
 
         if user_input:
             response = await process_input(user_input)  # ✅ Get AI response
             if response:
-                tts_speak(response)  # ✅ Speak only VORTEX's response
+                speak_text(response)  # ✅ Speak only VORTEX's response
 
 if __name__ == "__main__":
     # os.system('cls')
