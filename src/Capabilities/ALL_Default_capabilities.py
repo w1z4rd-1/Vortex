@@ -6,6 +6,7 @@ import subprocess
 import os
 import importlib
 import tempfile
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 import glob
 import ctypes
 from src.Google.auth import authorize
@@ -13,28 +14,25 @@ from ctypes import wintypes
 import markdown
 import webbrowser
 import wikipediaapi
-import json
 from email.mime.text import MIMEText
 from googleapiclient.discovery import build
 import re
-import openai  # Add this import
 from dotenv import load_dotenv
 import openai
 import numpy as np
 import faiss
-import openai
+
 import codecs
 import json
 import sys
 import time
-import openai
+
 import asyncio
 import src.Boring.capabilities as capabilities
 import base64
 import googleapiclient.errors
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 MEMORY_FILE = "memory.json"
-debug_mode = False
 TOKEN_PATH = "token.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 COLOR_BLUE = "\033[94m"
@@ -277,16 +275,6 @@ def read_vortex_code(filename: str, max_file_size: int = 5000):
         return f"❌ Error reading {filename}: {e}\n\n" + directory_tree
 
 
-def set_debug_mode(enable: bool = None):
-    """Enables or disables debug mode."""
-    print("FUNCTION RAN")
-    global debug_mode
-    
-    if enable is None:
-        return "❌ Missing 'enable' argument. Use true or false."
-    
-    debug_mode = enable  # ✅ Update debug mode flag
-    return f"✅ Debug mode {'enabled' if enable else 'disabled'}."
 def powershell(permission: bool = False, command: str = "", returnoutput: bool = True) -> str:
     """
     Executes a PowerShell command with permission handling.
@@ -334,9 +322,6 @@ def powershell(permission: bool = False, command: str = "", returnoutput: bool =
         return f"❌ PowerShell Error: {e.stderr.strip() if e.stderr else str(e)}"
     except Exception as e:
         return f"❌ Unexpected Error: {str(e)}"
-def get_debug_mode():
-    """Returns the current debug mode state."""
-    return debug_mode
 def get_user_info():
     """Fetches user location details based on their public IP address using ip-api.com."""
     try:
@@ -767,7 +752,7 @@ def generate_image(prompt: str, save_path: str = None):
     try:
         # Default to VORTEX temp directory
         if not save_path:
-            save_path = os.path.join(VORTEX_TEMP_DIR, "generated_image.png")
+            save_path = os.path.join(VORTEX_TEMP_DIR, "/generated_image.png")
         else:
             save_path = os.path.abspath(os.path.expandvars(save_path))
         

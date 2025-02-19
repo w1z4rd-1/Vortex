@@ -5,7 +5,6 @@ import numpy as np
 import wave
 import pyaudio
 import whisper
-import openai
 import pvporcupine
 import sounddevice as sd
 import io
@@ -17,7 +16,7 @@ from scipy.fftpack import fft
 from dotenv import load_dotenv
 import warnings
 #from display import display
-from src.Capabilities.ALL_Default_capabilities import set_debug_mode, get_debug_mode
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 
 from pydub import AudioSegment
 
@@ -67,7 +66,7 @@ def detect_wake_word():
 # ------------------------------
 # Speech Recording & Transcription
 # ------------------------------
-def record_audio(filename="recorded_audio.wav", silence_threshold=1300, silence_duration=1.2):
+def record_audio(filename="temp/recorded_audio.wav", silence_threshold=1300, silence_duration=1.2):
     """Records audio until silence is detected."""
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
@@ -135,7 +134,7 @@ def tts_speak(text):
         print(f"[🔊 Speaking: {text}]")
 
     try:
-        speech_file_path = "tts_output.mp3"
+        speech_file_path = "temp/tts_output.mp3"
         response = client.audio.speech.create(
             model="tts-1",
             voice="nova",

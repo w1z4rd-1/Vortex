@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # Now, import your modules
 from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak
 from src.Boring.boring import call_openai, add_user_input, display_startup_message
-from src.Capabilities.ALL_Default_capabilities import get_debug_mode
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 from src.Boring.capabilities import initialize_capabilities
 import time
 

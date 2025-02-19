@@ -9,7 +9,8 @@ from src.Boring.capabilities import get_function_registry, get_function_schemas
 import src.Boring.capabilities as capabilities  # This module should provide:
                      # - get_function_schemas(): returns function schemas (or None if none)
                      # - get_function_registry(): returns a dict mapping function names to callables.
-from src.Capabilities.ALL_Default_capabilities import set_debug_mode, get_debug_mode, retrieve_memory, read_vortex_code
+from src.Capabilities.ALL_Default_capabilities import retrieve_memory, read_vortex_code
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 #from display import display
 # ------------------------------
 # VORTEX Version & Environment Setup

@@ -7,6 +7,7 @@ import time
 import threading
 import librosa
 import math
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 
 class Display:
     def __init__(self):
