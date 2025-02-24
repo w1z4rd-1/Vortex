@@ -125,7 +125,7 @@ def add_new_capability(function_name: str, function_code: str):
     
     # Ensure required imports are included
     required_imports = (
-        "from src.Boring.functions import get_debug_mode\n"
+        "from src.Capabilities.debug_mode import get_debug_mode\n"
         "import src.Boring.capabilities as capabilities\n\n"
     )
     
@@ -1503,8 +1503,8 @@ capabilities.register_function_in_registry("delete_memory", delete_memory)
 capabilities.register_function_in_registry("list_memory_categories", list_memory_categories)
 capabilities.register_function_in_registry("powershell", powershell)
 capabilities.register_function_in_registry("search_query", search_query)
-capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
-capabilities.register_function_in_registry("add_new_capability", add_new_capability) #WIP
+#capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
+capabilities.register_function_in_registry("add_new_capability", add_new_capability)
 capabilities.register_function_in_registry("restart_vortex", restart_vortex)
 capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
 capabilities.register_function_in_registry("get_weather_forecast", get_weather_forecast)
@@ -1795,7 +1795,7 @@ capabilities.register_function_schema({
         }
     }
 })
-
+"""
 capabilities.register_function_schema({
     "type": "function",
     "function": {
@@ -1810,6 +1810,7 @@ capabilities.register_function_schema({
         }
     }
 })
+"""
 capabilities.register_function_schema({
     "type": "function",
     "function": {

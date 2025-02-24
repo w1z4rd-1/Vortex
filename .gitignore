@@ -13,3 +13,6 @@ temp/
 .vscode/
 test_output.mp3
 tts_output.mp3
+MOCK_DATA.csv
+SEPTEMBER GROSS SALES - 2024-09-01 - 2024-09-30.xlsx
+src/Capabilities/debug_mode.json

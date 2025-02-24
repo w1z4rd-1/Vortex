@@ -17,7 +17,7 @@ def urban_dictionary_definition(word: str) -> str:
             return 'Definition not found.'
     else:
         return 'Error fetching definition.'
-
+    
 urban_dictionary_definition.schema = {
     'word': str
 }
