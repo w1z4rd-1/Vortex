@@ -14,7 +14,6 @@ from src.Boring.boring import call_openai, add_user_input, display_startup_messa
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 from src.Boring.capabilities import initialize_capabilities
 import time
-
 # ANSI Color Codes for Terminal Output
 COLOR_BLUE = "\033[94m"
 COLOR_GREEN = "\033[92m"
@@ -23,11 +22,11 @@ COLOR_RESET = "\033[0m"
 
 async def process_input(user_input):
     """
-    Calls OpenAI's API
+    Calls OpenAI's API and processes the user input.
     """
-    add_user_input(user_input)
-    add_user_input(user_input)
-    response = await call_openai()
+    add_user_input(user_input)  # Add user input once
+    response = await call_openai()  # Call OpenAI API
+    return response  # Return the response
 
 async def main():
     mode = "text"  # Start in text mode by default.
@@ -84,7 +83,7 @@ if __name__ == "__main__":
     # os.system('cls')
     initialize_capabilities()
     display_startup_message()
-
+   
     # ✅ Start AI loop in a background thread
     def run_asyncio():
         loop = asyncio.new_event_loop()
