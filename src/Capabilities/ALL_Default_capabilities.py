@@ -1494,6 +1494,42 @@ def parse_speech_syntax(input_text: str):
     
     return segments
 
+# steam bullshit isnt written by ai (whattttt)
+# To use the steam browser protocol(very cool stuff) u may have to remind vortex its ability to do so i have this in my main prompt (VORTEX can interact with Steam via the Steam browser protocol using the command "start steam://example")
+import vdf
+import winreg
+reg = winreg.ConnectRegistry(None,winreg.HKEY_LOCAL_MACHINE)
+def get_steam():
+	libraryLoc = winreg.OpenKey(reg,r"SOFTWARE\WOW6432Node\Valve\Steam")
+	return winreg.QueryValueEx(libraryLoc, "InstallPath")[0]
+
+def get_steam_apps():
+    # Get appids of all installed games
+    librar = []
+    g = vdf.parse(open(f'{get_steam()}/steamapps/libraryfolders.vdf'))
+    for i in g['libraryfolders']:
+        for x in g['libraryfolders'][f"{i}"]['apps']:
+            librar.append(int(x))
+    games = {}
+
+    # Get games name by appid
+    response = requests.get("https://api.steampowered.com/ISteamApps/GetAppList/v2/").json()
+    for i in range(len(response['applist']['apps'])):
+        #print(appid, name)
+        if (response['applist']['apps'][i]['appid']) in librar and response['applist']['apps'][i]['appid'] not in games:
+            print(response['applist']['apps'][i]['name'])
+            print(response['applist']['apps'][i]['appid'])
+            games.update({response['applist']['apps'][i]['appid'] : response['applist']['apps'][i]['name']})
+    print(games)
+    return games
+
+def start_steam_app(appid: str):
+    os.system(f""""{get_steam()}/steam.exe" steam://run/{appid}""")
+    return f"✅ Game may update before launching"
+
+capabilities.register_function_in_registry("get_steam_apps", get_steam_apps)
+capabilities.register_function_in_registry("start_steam_app", start_steam_app)
+capabilities.register_function_in_registry("get_steam", get_steam)
 capabilities.register_function_in_registry("read_gmail", read_gmail)
 capabilities.register_function_in_registry("send_email", send_email)
 capabilities.register_function_in_registry("modify_email", modify_email)
@@ -1525,6 +1561,40 @@ capabilities.register_function_in_registry("create_event", create_event)
 capabilities.register_function_in_registry("list_events", list_events)
 capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
 capabilities.register_function_in_registry("speak_text", speak_text)
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function":{
+        "name": "get_steam_apps",
+        "description": "Gets name and appid of all installed steamapps",
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function": {
+        "name": "get_steam",
+        "description": "Gets location of steam.exe usefull for using the steam browser protocol in console"
+    }
+})
+
+capabilities.register_function_schema({
+    "type": "function",
+    "function":{
+        "name": "start_steam_app",
+        "description": "Opens a steam app by id",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "appid": {
+                    "type": "string",
+                    "description": "Steam appid to open"
+                }
+            },
+            "required": ["appid"]
+        }
+    }
+})
 
 # ✅ Register Function Schemas
 capabilities.register_function_schema({

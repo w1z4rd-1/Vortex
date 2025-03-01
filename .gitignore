@@ -8,7 +8,6 @@ build.py
 build/
 VORTEX.spec
 dist/VORTEX.exe
-memory.json
 temp/
 .vscode/
 test_output.mp3
