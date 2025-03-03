@@ -8,16 +8,17 @@ import winreg
 import requests
 import os
 
-reg = winreg.ConnectRegistry(None,winreg.HKEY_LOCAL_MACHINE)
+REG = winreg.ConnectRegistry(None,winreg.HKEY_LOCAL_MACHINE) # May need to be changed for 32bit windows
+URL = "https://api.steampowered.com/ISteamApps/GetAppList/v2/"
+
 def get_steam_path():
-	libraryLoc = winreg.OpenKey(reg,r"SOFTWARE\WOW6432Node\Valve\Steam")
+	# Returns string
+	libraryLoc = winreg.OpenKey(REG,r"SOFTWARE\WOW6432Node\Valve\Steam")
 	return winreg.QueryValueEx(libraryLoc, "InstallPath")[0]
 
-
 def get_steam_apps(): # Should rewrite this
-	# Returns all installed steamapp names
+	# Returns dictionary
 
-	# Gets appids
 	librar = []
 	g = vdf.parse(open(f'{get_steam_path()}/steamapps/libraryfolders.vdf'))
 	for i in g['libraryfolders']:
@@ -26,7 +27,7 @@ def get_steam_apps(): # Should rewrite this
 	games = {}
 
 	# Get games name by appid
-	response = requests.get("https://api.steampowered.com/ISteamApps/GetAppList/v2/").json()
+	response = requests.get(URL).json()
 	for i in range(len(response['applist']['apps'])):
 		#print(appid, name)
 		if (response['applist']['apps'][i]['appid']) in librar and response['applist']['apps'][i]['appid'] not in games:
@@ -37,6 +38,7 @@ def get_steam_apps(): # Should rewrite this
 	return games
 
 def start_steam_app(appid: str):
+	# Returns string
 	os.system(f""""{get_steam_path()}/steam.exe" steam://run/{appid}""")
 	return f"✅ Game may update before launching"
 

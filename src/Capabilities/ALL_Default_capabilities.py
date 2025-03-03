@@ -1,3 +1,5 @@
+# If you are adding capabilities please create them in a new file
+
 import src.Boring.capabilities as capabilities
 
 import requests
@@ -52,9 +54,12 @@ GOOGLE_SEARCH_CSE_ID = os.getenv("GOOGLE_SEARCH_CSE_ID")
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Add this at the top
 JSON_PATH = "powershell.json"
 VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
+
 if not os.path.exists(VORTEX_TEMP_DIR):
 	os.makedirs(VORTEX_TEMP_DIR)
+
 OPENAI_MODEL = "text-embedding-3-small"
+
 with open(JSON_PATH, "r", encoding="utf-8") as f:
 	powershell_permissions = json.load(f)
 
@@ -186,7 +191,6 @@ def restart_vortex():
 
 	# ✅ Restart the Python process
 	os.execl(sys.executable, sys.executable, *sys.argv)
-
 
 # Load API Key
 load_dotenv()
@@ -554,13 +558,14 @@ def get_time():
 
 	except Exception as e:
 		return {"error": f"Failed to retrieve time: {str(e)}"}
-def open_link(url: str):
-	
+def open_link(url: str): # This could be powershell (explorer "https://google.com")
+
 	"""Opens a specified URL in the default web browser. AI must not generate fake URLs."""
 	if url.startswith("http://") or url.startswith("https://"):
 		webbrowser.open(url)
 		return f"✅ Opened: {url}"
 	return "❌ Invalid or missing URL. AI must not guess links."
+
 def create_event(summary: str, start_time: str, duration: int = 60) -> dict:
 	"""
 	Creates a Google Calendar event.
@@ -1155,9 +1160,14 @@ def interpret_weather_code(code):
 		99: "Severe Thunderstorm ⛈🔥"
 	}
 	return weather_conditions.get(code, "Unknown Weather 🤷‍♂️")
+
+def encode_image(image_path):
+	with open(image_path, "rb") as image_file:
+		return base64.b64encode(image_file.read()).decode("utf-8")
 def analyze_image(image_path: str = None):
 	"""
 	Analyzes an image using GPT-4o's vision capabilities. If no path is provided, takes a screenshot instead.
+	Dont output response as a thought
 	
 	Parameters:
 	- image_path (str, optional): Path to the image file. If None, a screenshot is taken.
@@ -1181,17 +1191,29 @@ def analyze_image(image_path: str = None):
 
 		if get_debug_mode():
 			print(f"[📊 IMAGE DEBUG] Analyzing image: {image_path}")
+		image = encode_image(image_path)
 
 		# Open the image file
-		with open(image_path, "rb") as image_file:
-			response = openai.ChatCompletion.create(
-				model="gpt-4o",
-				messages=[{"role": "user", "content": "Describe the contents of this image."}],
-				images=[{"image": image_file.read()}]  # Read image data
-			)
+		response = openai.chat.completions.create(
+			model="gpt-4o",
+			messages=[
+				{"role": "user",
+	 			"content": [
+					{
+						"type": "text",
+						"text": "What is in this image?",
+					},
+					{
+						"type": "image_url",
+						"image_url": {"url": f"data:image/jpeg;base64,{image}"}
+					}
+				]
+				}
+			],
+		)
 
 		# Extract response
-		analysis_result = response["choices"][0]["message"]["content"]
+		analysis_result = response.choices[0].message.content
 
 		if get_debug_mode():
 			print(f"[✅ IMAGE DEBUG] Analysis result: {analysis_result}")
@@ -1202,7 +1224,7 @@ def analyze_image(image_path: str = None):
 		if get_debug_mode():
 			print(f"[❌ IMAGE DEBUG] Error occurred: {str(e)}")
 		return f"❌ Error analyzing image: {str(e)}"
-	
+
 def summarize_category(category_name: str):
 	try:
 		# Load stored memory
@@ -1480,7 +1502,6 @@ capabilities.register_function_in_registry("create_event", create_event)
 capabilities.register_function_in_registry("list_events", list_events)
 capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
 capabilities.register_function_in_registry("speak_text", speak_text)
-
 
 # ✅ Register Function Schemas
 capabilities.register_function_schema({
