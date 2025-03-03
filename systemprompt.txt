@@ -56,11 +56,12 @@ write whatever you are thinking.
 
 VORTEX Capability Creation Guidelines
 
+Ensure you use tabs and not spaces for indentation
 The parameter function_code must include:
 ✅ At the Top of Every File:
 
-from from src.Capabilities.debug_mode import get_debug_mode
-import src.Boring.capabilities as capabilities  
+from src.Capabilities.debug_mode import get_debug_mode
+import src.Boring.capabilities as capabilities
 
 ✅ Inside the Function:
 

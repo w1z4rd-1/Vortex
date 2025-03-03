@@ -21,77 +21,77 @@ COLOR_RED = "\033[91m"
 COLOR_RESET = "\033[0m"
 
 async def process_input(user_input):
-    """
-    Calls OpenAI's API and processes the user input.
-    """
-    add_user_input(user_input)  # Add user input once
-    response = await call_openai()  # Call OpenAI API
-    return response  # Return the response
+	"""
+	Calls OpenAI's API and processes the user input.
+	"""
+	add_user_input(user_input)  # Add user input once
+	response = await call_openai()  # Call OpenAI API
+	return response  # Return the response
 
 async def main():
-    mode = "text"  # Start in text mode by default.
-    previous_mode = mode  # ✅ Track previous mode to detect changes
-    while True:
-        if mode == "text":
-            user_input = input("You: ").strip()
-        else:
-            # ✅ Only announce voice mode activation when switching modes
-            if mode != previous_mode:
-                message = "Voice mode activated. Please speak..."
-                if get_debug_mode():
-                    print(message)  # ✅ Show only in debug mode
-                speak_text(message)  # ✅ Speak mode change
-            
-            if detect_wake_word():
-                audio_file = record_audio()
-                user_input = transcribe_audio(audio_file)
+	mode = "text"  # Start in text mode by default.
+	previous_mode = mode  # ✅ Track previous mode to detect changes
+	while True:
+		if mode == "text":
+			user_input = input("You: ").strip()
+		else:
+			# ✅ Only announce voice mode activation when switching modes
+			if mode != previous_mode:
+				message = "Voice mode activated. Please speak..."
+				if get_debug_mode():
+					print(message)  # ✅ Show only in debug mode
+				speak_text(message)  # ✅ Speak mode change
+			
+			if detect_wake_word():
+				audio_file = record_audio()
+				user_input = transcribe_audio(audio_file)
 
-                if user_input:
-                    if get_debug_mode():
-                        print(f"[User]: {user_input}")  # ✅ Show only in debug mode
-                else:
-                    error_message = "No voice input detected."
-                    if get_debug_mode():
-                        print(error_message)  # ✅ Show only in debug mode
-                    speak_text(error_message)  # ✅ Speak error message
-                    continue  
+				if user_input:
+					if get_debug_mode():
+						print(f"[User]: {user_input}")  # ✅ Show only in debug mode
+				else:
+					error_message = "No voice input detected."
+					if get_debug_mode():
+						print(error_message)  # ✅ Show only in debug mode
+					speak_text(error_message)  # ✅ Speak error message
+					continue  
 
-        # ✅ Update previous mode to track changes
-        previous_mode = mode
+		# ✅ Update previous mode to track changes
+		previous_mode = mode
 
-        if user_input.lower() in ['exit', 'quit']:
-            shutdown_message = "Shutting down VORTEX."
-            if get_debug_mode():
-                print(shutdown_message)  # ✅ Show only in debug mode
-            speak_text(shutdown_message)  # ✅ Speak shutdown message
-            break
-        
-        if user_input.lower() == "toggle":
-            mode = "voice" if mode == "text" else "text"
-            toggle_message = f"Mode switched to {mode.upper()}."
-            if get_debug_mode():
-                print(toggle_message)  # ✅ Show only in debug mode
-            speak_text(toggle_message)  # ✅ Speak mode change
-            continue  
+		if user_input.lower() in ['exit', 'quit']:
+			shutdown_message = "Shutting down VORTEX."
+			if get_debug_mode():
+				print(shutdown_message)  # ✅ Show only in debug mode
+			speak_text(shutdown_message)  # ✅ Speak shutdown message
+			break
+		
+		if user_input.lower() == "toggle":
+			mode = "voice" if mode == "text" else "text"
+			toggle_message = f"Mode switched to {mode.upper()}."
+			if get_debug_mode():
+				print(toggle_message)  # ✅ Show only in debug mode
+			speak_text(toggle_message)  # ✅ Speak mode change
+			continue  
 
-        if user_input:
-            response = await process_input(user_input)  # ✅ Get AI response
-            if response:
-                speak_text(response)  # ✅ Speak only VORTEX's response
+		if user_input:
+			response = await process_input(user_input)  # ✅ Get AI response
+			if response:
+				speak_text(response)  # ✅ Speak only VORTEX's response
 
 if __name__ == "__main__":
-    # os.system('cls')
-    initialize_capabilities()
-    display_startup_message()
+	# os.system('cls')
+	initialize_capabilities()
+	display_startup_message()
    
-    # ✅ Start AI loop in a background thread
-    def run_asyncio():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(main())
-    ai_thread = threading.Thread(target=run_asyncio, daemon=True)
-    ai_thread.start()
+	# ✅ Start AI loop in a background thread
+	def run_asyncio():
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		loop.run_until_complete(main())
+	ai_thread = threading.Thread(target=run_asyncio, daemon=True)
+	ai_thread.start()
 
-    # ✅ Keep VORTEX running indefinitely to prevent unexpected exits
-    while True:
-        time.sleep(1)  # ✅ Prevents high CPU usage
+	# ✅ Keep VORTEX running indefinitely to prevent unexpected exits
+	while True:
+		time.sleep(1)  # ✅ Prevents high CPU usage
