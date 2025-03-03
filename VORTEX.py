@@ -26,11 +26,11 @@ async def process_input(user_input):
 	"""
 	add_user_input(user_input)  # Add user input once
 	response = await call_openai()  # Call OpenAI API
-	return response  # Return the response
+	return response # Return the response
 
 async def main():
-	mode = "text"  # Start in text mode by default.
-	previous_mode = mode  # ✅ Track previous mode to detect changes
+	mode = "text" # Start in text mode by default.
+	previous_mode = mode # ✅ Track previous mode to detect changes
 	while True:
 		if mode == "text":
 			user_input = input("You: ").strip()
@@ -65,7 +65,7 @@ async def main():
 				print(shutdown_message)  # ✅ Show only in debug mode
 			speak_text(shutdown_message)  # ✅ Speak shutdown message
 			break
-		
+
 		if user_input.lower() == "toggle":
 			mode = "voice" if mode == "text" else "text"
 			toggle_message = f"Mode switched to {mode.upper()}."

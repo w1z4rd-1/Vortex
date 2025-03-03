@@ -182,26 +182,26 @@ def display_startup_message():
 	"""Displays VORTEX's startup banner with ASCII art and version information."""
 	COLOR_CYAN = "\033[96m"
 	vortex_ascii = r"""
-		  __
+          __
   _(\    |@@|
  (__/\__ \--/ __
-	\___|----|  |   __
-		\ }}{{ /\ )_ / _\
-		/\__/\ \__O (__
-	   (--/\--)    \__/
-	   _)(  )(_
-	  `---''---`
-	"""
+    \___|----|  |   __
+        \ }}{{ /\ )_ / _\
+        /\__/\ \__O (__
+       (--/\--)    \__/
+       _)(  )(_
+      `---''---`
+    """
 	box_width = 45
 	top_bottom_border = "═" * (box_width - 2)
 
 	startup_text = f"""{COLOR_CYAN}
-	╔{top_bottom_border}╗ 
-	║ VORTEX: Wizard's Virtual Assistant        ║ 
-	║ Version: {VORTEX_VERSION}{' ' * (box_width - (12 + len(VORTEX_VERSION)))}║ 
-	╠{top_bottom_border}╣ 
-	║ Created by: {COLOR_GREEN}Wizard1{' ' * 23}{COLOR_GREEN}║ 
-	╚{top_bottom_border}╝{COLOR_RESET}"""
+    ╔{top_bottom_border}╗ 
+    ║ VORTEX: Wizard's Virtual Assistant        ║ 
+    ║ Version: {VORTEX_VERSION}{' ' * (box_width - (12 + len(VORTEX_VERSION)))}║ 
+    ╠{top_bottom_border}╣ 
+    ║ Created by: {COLOR_GREEN}Wizard1{' ' * 23}{COLOR_GREEN}║ 
+    ╚{top_bottom_border}╝{COLOR_RESET}"""
 
 	print(COLOR_CYAN + vortex_ascii + COLOR_RESET)
 	print(startup_text)

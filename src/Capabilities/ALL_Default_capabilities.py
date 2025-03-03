@@ -1,20 +1,19 @@
+import src.Boring.capabilities as capabilities
+
 import requests
 from datetime import datetime, timedelta, timezone
 from src.Google.auth import authorize
-from googleapiclient.discovery import build
 import subprocess
 import os
+import openai
 import importlib
 from openai import OpenAI
-import sounddevice as sd
-import io
 from pydub import AudioSegment
-from src.Capabilities.debug_mode import get_debug_mode
 import tempfile
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
+import xml.etree.ElementTree as ET
 import glob
 import ctypes
-from src.Google.auth import authorize
 from ctypes import wintypes
 import markdown
 import webbrowser
@@ -23,19 +22,18 @@ from email.mime.text import MIMEText
 from googleapiclient.discovery import build
 import re
 from dotenv import load_dotenv
-import openai
 import numpy as np
-import faiss
-
 import codecs
 import json
 import sys
 import time
-
 import asyncio
-import src.Boring.capabilities as capabilities
+from pydub.playback import play
 import base64
+import pyautogui
 import googleapiclient.errors
+import faiss
+
 wiki_wiki = wikipediaapi.Wikipedia(user_agent="VORTEX", language="en")
 MEMORY_FILE = "memory.json"
 TOKEN_PATH = "token.json"
@@ -74,9 +72,6 @@ def retrieve_project_memory(query: str):
 	project_memories = retrieve_memory(query) or []
 	created_functions = retrieve_memory("created functions") or []
 	return project_memories + created_functions  # ✅ Merge both for better context
-
-
-import src.Boring.capabilities as capabilities
 
 def delete_capability(capability_name_or_file: str, get_function_registry):
 	"""
@@ -191,10 +186,7 @@ def restart_vortex():
 
 	# ✅ Restart the Python process
 	os.execl(sys.executable, sys.executable, *sys.argv)
-import os
-import requests
-import xml.etree.ElementTree as ET
-from dotenv import load_dotenv
+
 
 # Load API Key
 load_dotenv()
@@ -242,9 +234,183 @@ def query_wolfram_alpha(query: str) -> dict:
 	except requests.exceptions.RequestException as e:
 		return {"error": f"API request failed: {str(e)}"}
 
+def retrieve_memory(query: str):
+	"""Finds relevant memories using FAISS similarity search only (no keyword matching)."""
+	
+	if not os.path.exists(MEMORY_FILE):
+		print("[❌ MEMORY FILE MISSING] No memories.json found.")
+		return []
+
+	with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+		memory_data = json.load(f)
+
+	if not memory_data:
+		print("[❌ EMPTY MEMORY FILE] No memories stored.")
+		return []
+
+	query = query.lower().strip()
+	results = []
+
+	if get_debug_mode():
+		print(f"[🔍 MEMORY DEBUG] Query: {query}")
+
+	# ✅ Step 1: Convert query to an embedding
+	query_embedding = generate_embedding(query)
+	if query_embedding is None:
+		print("[❌ EMBEDDING ERROR] Failed to generate query embedding.")
+		return []
+
+	# ✅ Step 2: Search FAISS for similarity matches
+	for category, entries in memory_data.items():
+		embeddings = np.array([entry["embedding"] for entry in entries]).astype("float32")
+
+		if embeddings.size > 0:
+			index = faiss.IndexFlatL2(len(query_embedding))
+			index.add(embeddings)
+			D, I = index.search(np.array([query_embedding], dtype="float32"), 5)  # Retrieve top 5
+
+			for score, idx in zip(1 - D[0], I[0]):  # Convert L2 distance to similarity
+				if score > 0.3:  # ✅ Adjusted similarity threshold (higher = stricter)
+					if get_debug_mode():
+						print(f"[✅ EMBEDDING MATCH] '{entries[idx]['text']}' (Score: {score:.2f})")
+					results.append(entries[idx]['text'])
+
+	if results:
+		return results  
+
+	if get_debug_mode():
+		print("[❌ MEMORY DEBUG] No relevant memories found.")
+	return []
 
 
+def store_memory(text: str):
+	"""Stores a fact in memory using vector embeddings and FAISS for retrieval."""
+	try:
+		# ✅ Generate an embedding
+		response = openai.embeddings.create(model=OPENAI_MODEL, input=[text], encoding_format="float")
+		embedding = np.array(response.data[0].embedding, dtype="float32").tolist()
 
+		# ✅ Load existing memory file or create a new one
+		try:
+			with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+				memory_data = json.load(f)
+		except (FileNotFoundError, json.JSONDecodeError):
+			memory_data = {}
+
+		# ✅ Assign to "general" category if no category system is defined
+		category = "general"
+		if category not in memory_data:
+			memory_data[category] = []
+
+		# 🔍 **Check for Similar Memories Before Adding a New One**
+		index = faiss.IndexFlatL2(len(embedding))
+		if memory_data[category]:
+			embeddings = np.array([entry["embedding"] for entry in memory_data[category]]).astype("float32")
+			index.add(embeddings)
+
+			query_embedding = np.array(embedding).astype("float32").reshape(1, -1)
+			D, I = index.search(query_embedding, 1)  # Get the closest match
+
+			similarity_score = 1 - D[0][0]
+			if similarity_score > 0.75:  # **If it's over 75% similar, update instead**
+				memory_data[category][I[0][0]]["text"] = text
+				memory_data[category][I[0][0]]["embedding"] = embedding
+
+				with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+					json.dump(memory_data, f, indent=4)
+
+				return f"✅ Updated existing memory: {text} (Similarity Score: {similarity_score:.2f})"
+
+		# **Otherwise, store as a new memory**
+		memory_data[category].append({"text": text, "embedding": embedding})
+
+		# ✅ Save memory file
+		with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+			json.dump(memory_data, f, indent=4)
+
+		return f"✅ Stored new memory: {text}"
+
+	except Exception as e:
+		if get_debug_mode():
+			print(f"[❌ MEMORY ERROR] {str(e)}")
+		return f"❌ Error storing memory: {str(e)}"
+def delete_memory(query: str):
+	"""Deletes a specific stored memory or clears an entire category."""
+	with open(MEMORY_FILE, "r+") as f:
+		memory_data = json.load(f)
+
+	# ✅ Allow partial matches instead of requiring an exact match
+	deleted = False
+	for category, entries in memory_data.items():
+		for i, entry in enumerate(entries):
+			if query.lower() in entry["text"].lower():  # ✅ Check for partial match
+				del memory_data[category][i]
+				deleted = True
+				break
+
+	if deleted:
+		with open(MEMORY_FILE, "w") as f:
+			json.dump(memory_data, f, indent=4)
+		return f"✅ Memory related to '{query}' has been deleted."
+	else:
+		return f"🤷 No matching memory found for '{query}'."
+
+def list_memory_categories():
+	"""Lists all available memory categories from the memory file."""
+	if not os.path.exists(MEMORY_FILE):
+		print("[❌ MEMORY FILE MISSING] No memories.json found.")
+		return []
+
+	try:
+		with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+			memory_data = json.load(f)
+
+		categories = list(memory_data.keys())
+		if not categories:
+			print("[📂 EMPTY MEMORY] No categories available.")
+			return []
+		
+		print(f"[📜 MEMORY CATEGORIES] Available categories: {categories}")
+		return categories
+
+	except Exception as e:
+		print(f"[❌ ERROR] Failed to list memory categories: {e}")
+		return []
+
+def categorize_memory(text):
+	"""Uses GPT-4o to determine a category for a memory entry with a strict one-word rule."""
+	
+	categories = list_memory_categories()  # ✅ Load existing categories
+	
+	system_prompt = (
+		f"Please categorize this fact. "
+		f"Only respond with **one** single word, the category name. "
+		f"Current categories: {', '.join(categories) if categories else 'None'}. "
+		f"If none fit, respond with a new category name."
+	)
+
+	try:
+		response = openai.ChatCompletion.create(
+			model="gpt-4o",
+			messages=[
+				{"role": "system", "content": system_prompt},
+				{"role": "user", "content": text}
+			]
+		)
+
+		category = response.choices[0].message["content"].strip().lower()
+
+		# ✅ Ensure it's only **one word** (remove extra spaces/newlines)
+		if " " in category or len(category) == 0:
+			print(f"[⚠️ WARNING] Invalid category received: '{category}', defaulting to 'general'.")
+			return "general"
+
+		print(f"[📂 CATEGORY ASSIGNED] '{text}' → '{category}'")
+		return category
+
+	except Exception as e:
+		print(f"[❌ ERROR] Failed to categorize memory: {e}")
+		return "general"  # ✅ Safe fallback category
 
 def read_vortex_code(filename: str, max_file_size: int = 5000):
 	"""Reads and returns the contents of any file in the src directory or its subdirectories.
@@ -611,9 +777,6 @@ def list_events(max_results=10, time_min=None, time_max=None, order_by="startTim
 
 	except Exception as e:
 		return {"error": f"❌ Failed to list events: {str(e)}"}
-	
-import requests
-from datetime import datetime
 
 def get_weather_forecast(latitude: float, longitude: float, forecast_type: str, timezone="auto"):
 	"""
@@ -744,14 +907,6 @@ def search_query(query):
 	# ❌ **Step 3: Neither Wikipedia nor Google Worked**
 	return "Information inaccessible, do not guess."
 
-import os
-import tempfile
-import pyautogui
-import openai
-import base64
-import requests
-import os
-import tempfile
 def generate_image(prompt: str, save_path: str = None):
 	"""Generates an image using DALL-E and saves it or displays it."""
 	try:
@@ -861,8 +1016,7 @@ client = openai.OpenAI(api_key=OPENAI_API_KEY)
 VORTEX_TEMP_DIR = os.path.join(tempfile.gettempdir(), "VORTEX")
 if not os.path.exists(VORTEX_TEMP_DIR):
 	os.makedirs(VORTEX_TEMP_DIR)
-import requests
-from datetime import datetime, timedelta
+
 def get_weather_forecast(latitude, longitude, forecast_mode, timezone="auto"):
 	"""
 	Fetches a weather forecast from the Open-Meteo API.
@@ -1100,188 +1254,9 @@ def generate_embedding(text): # helper function
 		print(f"[❌ EMBEDDING ERROR] {str(e)}")
 		return None  # Return None if embedding fails
 
-def retrieve_memory(query: str):
-	"""Finds relevant memories using FAISS similarity search only (no keyword matching)."""
-	
-	if not os.path.exists(MEMORY_FILE):
-		print("[❌ MEMORY FILE MISSING] No memories.json found.")
-		return []
-
-	with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-		memory_data = json.load(f)
-
-	if not memory_data:
-		print("[❌ EMPTY MEMORY FILE] No memories stored.")
-		return []
-
-	query = query.lower().strip()
-	results = []
-
-	if get_debug_mode():
-		print(f"[🔍 MEMORY DEBUG] Query: {query}")
-
-	# ✅ Step 1: Convert query to an embedding
-	query_embedding = generate_embedding(query)
-	if query_embedding is None:
-		print("[❌ EMBEDDING ERROR] Failed to generate query embedding.")
-		return []
-
-	# ✅ Step 2: Search FAISS for similarity matches
-	for category, entries in memory_data.items():
-		embeddings = np.array([entry["embedding"] for entry in entries]).astype("float32")
-
-		if embeddings.size > 0:
-			index = faiss.IndexFlatL2(len(query_embedding))
-			index.add(embeddings)
-			D, I = index.search(np.array([query_embedding], dtype="float32"), 5)  # Retrieve top 5
-
-			for score, idx in zip(1 - D[0], I[0]):  # Convert L2 distance to similarity
-				if score > 0.3:  # ✅ Adjusted similarity threshold (higher = stricter)
-					if get_debug_mode():
-						print(f"[✅ EMBEDDING MATCH] '{entries[idx]['text']}' (Score: {score:.2f})")
-					results.append(entries[idx]['text'])
-
-	if results:
-		return results  
-
-	if get_debug_mode():
-		print("[❌ MEMORY DEBUG] No relevant memories found.")
-	return []
-
-
 def shutdown_vortex():
 	print("[🛑 VORTEX SHUTDOWN] Exiting program...")
 	sys.exit(0)  # Exit the program
-def store_memory(text: str):
-	"""Stores a fact in memory using vector embeddings and FAISS for retrieval."""
-	try:
-		# ✅ Generate an embedding
-		response = openai.embeddings.create(model=OPENAI_MODEL, input=[text], encoding_format="float")
-		embedding = np.array(response.data[0].embedding, dtype="float32").tolist()
-
-		# ✅ Load existing memory file or create a new one
-		try:
-			with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-				memory_data = json.load(f)
-		except (FileNotFoundError, json.JSONDecodeError):
-			memory_data = {}
-
-		# ✅ Assign to "general" category if no category system is defined
-		category = "general"
-		if category not in memory_data:
-			memory_data[category] = []
-
-		# 🔍 **Check for Similar Memories Before Adding a New One**
-		index = faiss.IndexFlatL2(len(embedding))
-		if memory_data[category]:
-			embeddings = np.array([entry["embedding"] for entry in memory_data[category]]).astype("float32")
-			index.add(embeddings)
-
-			query_embedding = np.array(embedding).astype("float32").reshape(1, -1)
-			D, I = index.search(query_embedding, 1)  # Get the closest match
-
-			similarity_score = 1 - D[0][0]
-			if similarity_score > 0.75:  # **If it's over 75% similar, update instead**
-				memory_data[category][I[0][0]]["text"] = text
-				memory_data[category][I[0][0]]["embedding"] = embedding
-
-				with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-					json.dump(memory_data, f, indent=4)
-
-				return f"✅ Updated existing memory: {text} (Similarity Score: {similarity_score:.2f})"
-
-		# **Otherwise, store as a new memory**
-		memory_data[category].append({"text": text, "embedding": embedding})
-
-		# ✅ Save memory file
-		with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-			json.dump(memory_data, f, indent=4)
-
-		return f"✅ Stored new memory: {text}"
-
-	except Exception as e:
-		if get_debug_mode():
-			print(f"[❌ MEMORY ERROR] {str(e)}")
-		return f"❌ Error storing memory: {str(e)}"
-def delete_memory(query: str):
-	"""Deletes a specific stored memory or clears an entire category."""
-	with open(MEMORY_FILE, "r+") as f:
-		memory_data = json.load(f)
-
-	# ✅ Allow partial matches instead of requiring an exact match
-	deleted = False
-	for category, entries in memory_data.items():
-		for i, entry in enumerate(entries):
-			if query.lower() in entry["text"].lower():  # ✅ Check for partial match
-				del memory_data[category][i]
-				deleted = True
-				break
-
-	if deleted:
-		with open(MEMORY_FILE, "w") as f:
-			json.dump(memory_data, f, indent=4)
-		return f"✅ Memory related to '{query}' has been deleted."
-	else:
-		return f"🤷 No matching memory found for '{query}'."
-
-def list_memory_categories():
-	"""Lists all available memory categories from the memory file."""
-	if not os.path.exists(MEMORY_FILE):
-		print("[❌ MEMORY FILE MISSING] No memories.json found.")
-		return []
-
-	try:
-		with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-			memory_data = json.load(f)
-
-		categories = list(memory_data.keys())
-		if not categories:
-			print("[📂 EMPTY MEMORY] No categories available.")
-			return []
-		
-		print(f"[📜 MEMORY CATEGORIES] Available categories: {categories}")
-		return categories
-
-	except Exception as e:
-		print(f"[❌ ERROR] Failed to list memory categories: {e}")
-		return []
-
-def categorize_memory(text):
-	"""Uses GPT-4o to determine a category for a memory entry with a strict one-word rule."""
-	
-	categories = list_memory_categories()  # ✅ Load existing categories
-	
-	system_prompt = (
-		f"Please categorize this fact. "
-		f"Only respond with **one** single word, the category name. "
-		f"Current categories: {', '.join(categories) if categories else 'None'}. "
-		f"If none fit, respond with a new category name."
-	)
-
-	try:
-		response = openai.ChatCompletion.create(
-			model="gpt-4o",
-			messages=[
-				{"role": "system", "content": system_prompt},
-				{"role": "user", "content": text}
-			]
-		)
-
-		category = response.choices[0].message["content"].strip().lower()
-
-		# ✅ Ensure it's only **one word** (remove extra spaces/newlines)
-		if " " in category or len(category) == 0:
-			print(f"[⚠️ WARNING] Invalid category received: '{category}', defaulting to 'general'.")
-			return "general"
-
-		print(f"[📂 CATEGORY ASSIGNED] '{text}' → '{category}'")
-		return category
-
-	except Exception as e:
-		print(f"[❌ ERROR] Failed to categorize memory: {e}")
-		return "general"  # ✅ Safe fallback category
-
-
 
 def read_gmail(count: int = 5):
 	"""Fetches unread emails from Gmail and returns a summary."""
@@ -1371,27 +1346,7 @@ def modify_email(email_id: str, action: str):
 	except Exception as e:
 		return f"❌ Email modification error: {str(e)}"
 
-import os
-import numpy as np
-import sounddevice as sd
-import io
-import re
-from openai import OpenAI
-from pydub import AudioSegment
-from src.Capabilities.debug_mode import get_debug_mode
-
 # Initialize OpenAI Client
-import os
-import numpy as np
-import sounddevice as sd
-import io
-import re
-import asyncio
-from openai import OpenAI
-from pydub import AudioSegment
-from pydub.playback import play
-from src.Capabilities.debug_mode import get_debug_mode
-
 client = OpenAI()
 
 async def generate_tts_segment(segment):
@@ -1494,52 +1449,16 @@ def parse_speech_syntax(input_text: str):
 	
 	return segments
 
-# steam bullshit isnt written by ai (whattttt)
-# To use the steam browser protocol(very cool stuff) u may have to remind vortex its ability to do so i have this in my main prompt (VORTEX can interact with Steam via the Steam browser protocol using the command "start steam://example")
-import vdf
-import winreg
-reg = winreg.ConnectRegistry(None,winreg.HKEY_LOCAL_MACHINE)
-def get_steam():
-	libraryLoc = winreg.OpenKey(reg,r"SOFTWARE\WOW6432Node\Valve\Steam")
-	return winreg.QueryValueEx(libraryLoc, "InstallPath")[0]
-
-def get_steam_apps():
-	# Get appids of all installed games
-	librar = []
-	g = vdf.parse(open(f'{get_steam()}/steamapps/libraryfolders.vdf'))
-	for i in g['libraryfolders']:
-		for x in g['libraryfolders'][f"{i}"]['apps']:
-			librar.append(int(x))
-	games = {}
-
-	# Get games name by appid
-	response = requests.get("https://api.steampowered.com/ISteamApps/GetAppList/v2/").json()
-	for i in range(len(response['applist']['apps'])):
-		#print(appid, name)
-		if (response['applist']['apps'][i]['appid']) in librar and response['applist']['apps'][i]['appid'] not in games:
-			print(response['applist']['apps'][i]['name'])
-			print(response['applist']['apps'][i]['appid'])
-			games.update({response['applist']['apps'][i]['appid'] : response['applist']['apps'][i]['name']})
-	print(games)
-	return games
-
-def start_steam_app(appid: str):
-	os.system(f""""{get_steam()}/steam.exe" steam://run/{appid}""")
-	return f"✅ Game may update before launching"
-
-capabilities.register_function_in_registry("get_steam_apps", get_steam_apps)
-capabilities.register_function_in_registry("start_steam_app", start_steam_app)
-capabilities.register_function_in_registry("get_steam", get_steam)
 capabilities.register_function_in_registry("read_gmail", read_gmail)
-capabilities.register_function_in_registry("send_email", send_email)
-capabilities.register_function_in_registry("modify_email", modify_email)
 capabilities.register_function_in_registry("store_memory", store_memory)
 capabilities.register_function_in_registry("retrieve_memory", retrieve_memory)
 capabilities.register_function_in_registry("delete_memory", delete_memory)
 capabilities.register_function_in_registry("list_memory_categories", list_memory_categories)
+capabilities.register_function_in_registry("send_email", send_email)
+capabilities.register_function_in_registry("modify_email", modify_email)
 capabilities.register_function_in_registry("powershell", powershell)
 capabilities.register_function_in_registry("search_query", search_query)
-#capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
+capabilities.register_function_in_registry("read_vortex_code", read_vortex_code)
 capabilities.register_function_in_registry("add_new_capability", add_new_capability)
 capabilities.register_function_in_registry("restart_vortex", restart_vortex)
 capabilities.register_function_in_registry("shutdown_vortex", shutdown_vortex)
@@ -1562,39 +1481,6 @@ capabilities.register_function_in_registry("list_events", list_events)
 capabilities.register_function_in_registry("query_wolfram_alpha", query_wolfram_alpha)
 capabilities.register_function_in_registry("speak_text", speak_text)
 
-capabilities.register_function_schema({
-	"type": "function",
-	"function":{
-		"name": "get_steam_apps",
-		"description": "Gets name and appid of all installed steamapps",
-	}
-})
-
-capabilities.register_function_schema({
-	"type": "function",
-	"function": {
-		"name": "get_steam",
-		"description": "Gets location of steam.exe usefull for using the steam browser protocol in console"
-	}
-})
-
-capabilities.register_function_schema({
-	"type": "function",
-	"function":{
-		"name": "start_steam_app",
-		"description": "Opens a steam app by id",
-		"parameters": {
-			"type": "object",
-			"properties": {
-				"appid": {
-					"type": "string",
-					"description": "Steam appid to open"
-				}
-			},
-			"required": ["appid"]
-		}
-	}
-})
 
 # ✅ Register Function Schemas
 capabilities.register_function_schema({
@@ -1702,6 +1588,59 @@ capabilities.register_function_schema({
 capabilities.register_function_schema({
 	"type": "function",
 	"function": {
+		"name": "store_memory",
+		"description": "Stores a memory. If a similar memory already exists, it will be updated instead.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"text": {"type": "string", "description": "The memory content to store."}
+			},
+			"required": ["text"]
+		}
+	}
+})
+
+capabilities.register_function_schema({
+	"type": "function",
+	"function": {
+		"name": "retrieve_memory",
+		"description": "Retrieves memory entries related to a given topic.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "The search query to find stored memories."}
+			},
+			"required": ["query"]
+		}
+	}
+})
+
+capabilities.register_function_schema({
+	"type": "function",
+	"function": {
+		"name": "delete_memory",
+		"description": "Deletes a specific stored memory or clears an entire category.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "The memory or category to be deleted."}
+			},
+			"required": ["query"]
+		}
+	}
+})
+
+capabilities.register_function_schema({
+	"type": "function",
+	"function": {
+		"name": "list_memory_categories",
+		"description": "Lists all available memory categories."
+	}
+})
+
+capabilities.register_function_schema({
+	"type": "function",
+	"function": {
 		"name": "clarify_and_launch",
 		"description": "Launches a program after the user clarifies their choice from multiple matches.",
 		"parameters": {
@@ -1781,58 +1720,6 @@ capabilities.register_function_schema({
 			},
 			"required": ["program_name"]
 		}
-	}
-})
-capabilities.register_function_schema({
-	"type": "function",
-	"function": {
-		"name": "store_memory",
-		"description": "Stores a memory. If a similar memory already exists, it will be updated instead.",
-		"parameters": {
-			"type": "object",
-			"properties": {
-				"text": {"type": "string", "description": "The memory content to store."}
-			},
-			"required": ["text"]
-		}
-	}
-})
-
-capabilities.register_function_schema({
-	"type": "function",
-	"function": {
-		"name": "retrieve_memory",
-		"description": "Retrieves memory entries related to a given topic.",
-		"parameters": {
-			"type": "object",
-			"properties": {
-				"query": {"type": "string", "description": "The search query to find stored memories."}
-			},
-			"required": ["query"]
-		}
-	}
-})
-
-capabilities.register_function_schema({
-	"type": "function",
-	"function": {
-		"name": "delete_memory",
-		"description": "Deletes a specific stored memory or clears an entire category.",
-		"parameters": {
-			"type": "object",
-			"properties": {
-				"query": {"type": "string", "description": "The memory or category to be deleted."}
-			},
-			"required": ["query"]
-		}
-	}
-})
-
-capabilities.register_function_schema({
-	"type": "function",
-	"function": {
-		"name": "list_memory_categories",
-		"description": "Lists all available memory categories."
 	}
 })
 
