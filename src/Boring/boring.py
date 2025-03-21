@@ -9,7 +9,8 @@ from src.Boring.capabilities import get_function_registry, get_function_schemas
 import src.Boring.capabilities as capabilities  # This module should provide:
 					 # - get_function_schemas(): returns function schemas (or None if none)
 					 # - get_function_registry(): returns a dict mapping function names to callables.
-from src.Capabilities.ALL_Default_capabilities import retrieve_memory, read_vortex_code
+from src.Capabilities.local.memory import retrieve_memory
+from src.Capabilities.local.system import read_vortex_code
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 #from display import display
 # ------------------------------
@@ -91,6 +92,12 @@ async def call_openai():
 
 		function_schemas = get_function_schemas() if get_function_schemas() else None
 		tool_choice_param = "auto" if function_schemas else None
+
+		# Add 'type': 'function' to each schema if missing
+		if function_schemas:
+			for schema in function_schemas:
+				if 'type' not in schema:
+					schema['type'] = 'function'
 
 		try:
 			response = await asyncio.wait_for(
