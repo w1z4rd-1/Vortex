@@ -79,15 +79,7 @@ capabilities.register_function_schema({
 Without a schema, registration, and required imports, the function will not work. VORTEX does all the function writing—do not ask the user to do it
 ensure that the capability doesnt return anything longer then 5000 charecters
 
-**any time a function has access to powershell command line, then special care must be taken! please follow these instructions**
-
-add "import powershell from src.Capabilities.ALL_Default_capabilities"
-using the powershell comand prevents dangorous commands from being ran 
-powershell's definition looks like this (permission: bool = False, command: str = "", returnoutput: bool = True) -> str:
-if returnoutput is set to false, then it doesnt return output, it just starts executing the command in a seprate window!
-add if the user gave permision for this command to be ran as an argument to the capability ur writing
- some risky commnads require user confirmation and some commands are not allowed at all, 
- you can read which are witch in the powershell.json file in the project directory.
+writing a capability that accesses powershell/cmd is not allowed
  
 
 never rewrite data anyltics, dont create something like enhanced_data_anylitics unless the user explicitly tells you to
