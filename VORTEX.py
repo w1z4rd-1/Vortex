@@ -1,51 +1,59 @@
+import os
+import sys
+import asyncio
+import threading
+import time
+
 print("Initializing VORTEX...")
 
 # Configuration - must be set before any imports
 USE_OPTIONAL_EXTRAS = False  # Set to False to disable optional extras
-USE_PORCUPINE = False  # Set to False to use energy-based wake word detection instead of Porcupine
 
 # Set as environment variable for child processes
-import os
 os.environ['USE_OPTIONAL_EXTRAS'] = 'true' if USE_OPTIONAL_EXTRAS else 'false'
-os.environ['USE_PORCUPINE'] = 'true' if USE_PORCUPINE else 'false'
 
-import asyncio
-import threading
-import sys
-import time
+# Add a simple flag to prevent re-initialization
+_VORTEX_INITIALIZED = False
 
-# Add the src directory to Python's module search path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-# Initialize capabilities first - this clears the registry ONCE before any other imports
-from src.Boring.capabilities import initialize_capabilities
-initialize_capabilities()
-
-# Load core modules - these will register with the already initialized registry
-from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak, wait_for_tts_completion, is_tts_available, list_audio_devices
-from src.Boring.boring import call_openai, add_user_input, display_startup_message
-from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
-
-# Define an async wrapper for our tts_speak function to maintain compatibility
-async def speak_text(text, wait_for_completion=False):
-    """
-    Speak text using TTS engine.
+# Check if we've already gone through initialization
+if _VORTEX_INITIALIZED:
+    print("WARNING: VORTEX trying to initialize multiple times, skipping...")
+else:
+    _VORTEX_INITIALIZED = True
+    print(f"Starting VORTEX initialization (Process ID: {os.getpid()})")
     
-    Args:
-        text: The text to speak
-        wait_for_completion: If True, wait for TTS to complete before returning
-    """
-    # Add to the TTS queue
-    tts_speak(text)
+    # Add the src directory to Python's module search path
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     
-    # Small delay to ensure the queue processing has started
-    await asyncio.sleep(0.1)
+    # Initialize capabilities first - this clears the registry ONCE before any other imports
+    from src.Boring.capabilities import initialize_capabilities
+    initialize_capabilities()
     
-    # Optionally wait for completion
-    if wait_for_completion:
-        # Wait in small chunks to keep the event loop responsive
-        while not wait_for_tts_completion(timeout=0.5):  # Check every 0.5 seconds
-            await asyncio.sleep(0.1)
+    # Load core modules - these will register with the already initialized registry
+    from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak, wait_for_tts_completion, is_tts_available, list_audio_devices
+    from src.Boring.boring import call_openai, add_user_input, display_startup_message
+    from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
+    
+    # Define an async wrapper for our tts_speak function to maintain compatibility
+    async def speak_text(text, wait_for_completion=False):
+        """
+        Speak text using TTS engine.
+        
+        Args:
+            text: The text to speak
+            wait_for_completion: If True, wait for TTS to complete before returning
+        """
+        # Add to the TTS queue
+        tts_speak(text)
+        
+        # Small delay to ensure the queue processing has started
+        await asyncio.sleep(0.1)
+        
+        # Optionally wait for completion
+        if wait_for_completion:
+            # Wait in small chunks to keep the event loop responsive
+            while not wait_for_tts_completion(timeout=0.5):  # Check every 0.5 seconds
+                await asyncio.sleep(0.1)
 
 # ANSI Color Codes for Terminal Output
 COLOR_BLUE = "\033[94m"
@@ -69,7 +77,7 @@ async def main():
             
             try:
                 # Set a timeout for wake word detection to prevent hanging
-                wake_word_detected = detect_wake_word(use_porcupine=USE_PORCUPINE)
+                wake_word_detected = detect_wake_word()
                 if wake_word_detected:
                     # First activate VORTEX with wake word
                     print("[Listening for your command...]")
@@ -132,8 +140,10 @@ async def main():
             except Exception as e:
                 print(f"{COLOR_RED}[ERROR] Wake word detection failed: {e}{COLOR_RESET}")
                 if get_debug_mode():
-                    print("Restarting wake word detection...")
+                    print(f"{COLOR_RED}[DEBUG] Continuing wake word detection loop...{COLOR_RESET}")
+                # Don't restart VORTEX, just wait a bit and continue the loop
                 await asyncio.sleep(1)
+                # DO NOT call restart_vortex here
                 continue
                 
         except KeyboardInterrupt:
@@ -141,17 +151,17 @@ async def main():
             break
         except Exception as e:
             print(f"{COLOR_RED}[ERROR] An unexpected error occurred: {e}{COLOR_RESET}")
+            if get_debug_mode():
+                print(f"{COLOR_RED}[DEBUG] Main loop will continue...{COLOR_RESET}")
             await asyncio.sleep(1)  # Prevent error loops from consuming resources
+            # DO NOT exit or restart VORTEX here
 
 if __name__ == "__main__":
     # os.system('cls')
     display_startup_message()
    
-    # Show which wake word detection method is being used
-    if USE_PORCUPINE:
-        print(f"{COLOR_GREEN}[✓] Using Porcupine for wake word detection{COLOR_RESET}")
-    else:
-        print(f"{COLOR_GREEN}[✓] Using Vosk for wake word detection - say 'VORTEX' or similar to activate{COLOR_RESET}")
+    # Show wake word detection message
+    print(f"{COLOR_GREEN}[✓] Using Vosk for wake word detection - say 'VORTEX' or similar to activate{COLOR_RESET}")
    
     # Show TTS status
     if is_tts_available():

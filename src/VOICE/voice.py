@@ -8,12 +8,13 @@ import sounddevice as sd
 import io
 import threading
 import json       # For processing Vosk JSON output
-from vosk import Model, KaldiRecognizer  # For wake word detection
-from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 import warnings
 import pyttsx3    # TTS engine
 import subprocess # For subprocess-based TTS as fallback
 import multiprocessing  # For process-based TTS
+from vosk import Model, KaldiRecognizer  # For wake word detection
+from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
+from pydub import AudioSegment
 
 # Try to import msvcrt for keyboard detection on Windows
 msvcrt_available = False
@@ -23,19 +24,17 @@ try:
 except ImportError:
     pass
 
-from pydub import AudioSegment
-
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Ensure temp directory exists for audio files
 if not os.path.exists("temp"):
-	os.makedirs("temp")
+	os.makedirs("temp", exist_ok=True)
 	print("Created temp directory for audio files")
 
 # Create models directory if not exists
 if not os.path.exists("models"):
-    os.makedirs("models")
+    os.makedirs("models", exist_ok=True)
     print("Created models directory for Vosk")
 
 # TTS settings
@@ -131,24 +130,25 @@ def init_tts():
             engine.setProperty('rate', TTS_RATE)
             engine.setProperty('volume', TTS_VOLUME)
             
-            # Run a simple test in a separate process
-            p = multiprocessing.Process(target=speak_in_process, args=("TTS test",))
-            p.start()
-            p.join(timeout=3)  # Wait up to 3 seconds
-            
-            if p.is_alive():
-                # If still running after timeout, terminate
-                p.terminate()
-                p.join()
-                print("⚠️ TTS test timeout - falling back to basic mode")
-                tts_available = True  # Still mark as available but will use simpler method
-            else:
-                print("✅ Text-to-Speech initialized successfully (process-based)")
+            # Use a simpler method to test TTS that doesn't rely on multiprocessing
+            try:
+                # Just test the engine directly
+                engine.say("TTS test")
+                engine.runAndWait()
+                engine.stop()
+                print("✅ Text-to-Speech initialized successfully (direct mode)")
                 tts_available = True
+            except Exception as e:
+                print(f"⚠️ TTS direct test failed: {e}")
+                print("⚠️ Using fallback text output mode")
+                tts_available = False
                 
             # Clean up the test engine
-            engine.stop()
-            del engine
+            try:
+                engine.stop()
+                del engine
+            except:
+                pass
             
     except Exception as e:
         if get_debug_mode():
@@ -218,42 +218,29 @@ def process_tts_queue():
                         print(f"[🔊 Speaking: {text_to_speak}]")
                     
                     try:
-                        # Use multiprocessing for TTS to prevent thread issues
-                        p = multiprocessing.Process(target=speak_in_process, 
-                                                   args=(text_to_speak, TTS_RATE, TTS_VOLUME))
-                        p.start()
-                        p.join(timeout=30)  # Wait up to 30 seconds
-                        
-                        if p.is_alive():
-                            # If still running after timeout, terminate
-                            p.terminate()
-                            p.join()
-                            print("⚠️ TTS process timed out")
+                        # Direct TTS - safer but may block the thread
+                        engine = pyttsx3.init()
+                        engine.setProperty('rate', TTS_RATE)
+                        engine.setProperty('volume', TTS_VOLUME)
+                        engine.say(text_to_speak)
+                        engine.runAndWait()
+                        engine.stop()
                     except Exception as e:
                         print(f"[❌ ERROR in TTS engine: {e}]")
-                        # Try alternate method as fallback
-                        try:
-                            # Direct engine creation as fallback
-                            engine = pyttsx3.init()
-                            engine.setProperty('rate', TTS_RATE)
-                            engine.setProperty('volume', TTS_VOLUME)
-                            engine.say(text_to_speak)
-                            engine.runAndWait()
-                            engine.stop()
-                        except Exception as e2:
-                            print(f"[❌ Fallback TTS also failed: {e2}]")
-                            # Final fallback - print the text
-                            print(f"[TTS TEXT]: {text_to_speak}")
+                        # Final fallback - print the text
+                        print(f"[TTS TEXT]: {text_to_speak}")
                 
                 # Whether we succeeded or failed, we're done speaking this item
                 with tts_queue_lock:
                     tts_is_speaking = False
-            else:
-                # No text to speak, sleep briefly
-                time.sleep(0.1)
+            
+            # Small pause before checking again
+            time.sleep(0.1)
+            
         except Exception as e:
-            print(f"[❌ ERROR in TTS queue processor: {e}]")
-            time.sleep(1)  # Prevent error loop from consuming CPU
+            if get_debug_mode():
+                print(f"[❌ ERROR in TTS queue processor: {e}]")
+            time.sleep(0.5)  # Wait a bit before trying again
 
 def is_tts_available():
     """Check if TTS is available and working."""
@@ -292,13 +279,12 @@ def wait_for_tts_completion(timeout=30):
 # ------------------------------
 # Wake Word Detection Options
 # ------------------------------
-def detect_wake_word(use_porcupine=False, return_buffer=False):
+def detect_wake_word(return_buffer=False):
     """
     Detects wake word using Vosk speech recognition.
     Listens for "vortex" or similar variations in speech input.
     
     Args:
-        use_porcupine: Parameter kept for compatibility but no longer used.
         return_buffer: If True, returns a pre-buffer of audio data after wake word detection
         
     Returns:
@@ -423,9 +409,10 @@ def detect_wake_word(use_porcupine=False, return_buffer=False):
                 if get_debug_mode():
                     print(f"[ERROR] Error terminating PyAudio: {e}")
     
-    # If we reach here, something went wrong
+    # If we reach here, something went wrong, but we should NOT restart VORTEX
+    # Just return False so the main loop will try again
     if get_debug_mode():
-        print("[WARNING] Wake word detection failed, restarting detection...")
+        print("[WARNING] Wake word detection failed, will retry...")
     return False
 
 # ------------------------------

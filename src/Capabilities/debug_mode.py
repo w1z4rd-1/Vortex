@@ -1,110 +1,117 @@
-from src.Boring.capabilities import get_function_registry, get_function_schemas, register_function_in_registry, register_function_schema
 import json
 import os
 
-# ✅ Define file path to store debug mode status
-DEBUG_MODE_FILE = os.path.join(os.path.dirname(__file__), "debug_mode.json")
-
-# ✅ Ensure the file exists with a default value
+# Define file path to store debug mode status
+DEBUG_MODE_FILE = "debug_mode.json"
 if not os.path.exists(DEBUG_MODE_FILE):
 	with open(DEBUG_MODE_FILE, "w") as f:
 		json.dump({"debug_mode": False}, f)
 
-def set_debug_mode(mode=True):
+# Global variable for debug mode
+_debug_mode = False
+
+def debugmode(enable=None):
 	"""
-	Set the debug mode for VORTEX.
+	Toggles or sets debug mode.
 	
 	Args:
-		mode (bool): True to enable debug mode, False to disable it.
-	"""
-	try:
-		with open(DEBUG_MODE_FILE, "w") as f:
-			json.dump({"debug_mode": mode}, f)
-		print(f"Debug mode {'enabled' if mode else 'disabled'}.")
-		return True
-	except Exception as e:
-		print(f"Error setting debug mode: {e}")
-		return False
-
-def get_debug_mode():
-	"""
-	Get the current debug mode state.
+		enable: True to enable debug mode, False to disable, None to toggle
 	
 	Returns:
-		bool: True if debug mode is enabled, False otherwise.
+		Current debug mode status
 	"""
+	global _debug_mode
+	
+	if enable is None:
+		# Toggle
+		_debug_mode = not _debug_mode
+	else:
+		# Set specific value
+		_debug_mode = bool(enable)
+	
+	status = "enabled" if _debug_mode else "disabled"
+	
+	try:
+		# Save to file for persistence
+		with open(DEBUG_MODE_FILE, "w") as f:
+			json.dump({"debug_mode": _debug_mode}, f)
+	except Exception as e:
+		pass
+		
+	if _debug_mode:
+		# Print capabilities status when debug mode is enabled
+		try:
+			# Import here to avoid circular import
+			from src.Boring.capabilities import get_initialization_status
+			status_info = get_initialization_status()
+			status_msg = f"""
+Debug mode {status}.
+
+Capabilities Status:
+- Initialization: {"Complete" if status_info["initialized"] else "Not Initialized"}
+- Registered Functions: {status_info["registered_functions"]}
+- Registered Schemas: {status_info["registered_schemas"]}
+- Loaded Modules: {status_info["loaded_modules"]}
+- Total Registration Count: {status_info["registration_count"]}
+"""
+			return status_msg
+		except Exception as e:
+			return f"Debug mode {status}. Could not retrieve capabilities status: {e}"
+	else:
+		return f"Debug mode {status}."
+
+def get_debug_mode():
+	"""Returns the current debug mode setting."""
+	global _debug_mode
+	
+	# Try to read from file first for persistence across runs
 	try:
 		if os.path.exists(DEBUG_MODE_FILE):
 			with open(DEBUG_MODE_FILE, "r") as f:
 				data = json.load(f)
-				return data.get("debug_mode", False)
-		return False
-	except Exception:
-		# If there's any error, default to debug mode off
-		return False
+				_debug_mode = data.get("debug_mode", False)
+	except:
+		pass
+	
+	return _debug_mode
+
+def set_debug_mode(enable):
+	"""Sets debug mode to the specified value."""
+	global _debug_mode
+	_debug_mode = bool(enable)
+	
+	# Save to file for persistence
+	try:
+		with open(DEBUG_MODE_FILE, "w") as f:
+			json.dump({"debug_mode": _debug_mode}, f)
+	except:
+		pass
+		
+	return _debug_mode
 
 def inspect_registry():
 	"""
-	Print information about the current registry state.
-	
-	This function will display all registered functions and schemas 
-	when debug mode is enabled.
+	Inspect the current state of the function registry and schemas.
 	"""
-	if not get_debug_mode():
-		return "Debug mode is disabled. Enable it to inspect registry."
-	
-	registry = get_function_registry()
-	schemas = get_function_schemas()
-	
-	print("\n===== FUNCTION REGISTRY INSPECTION =====")
-	print(f"Total registered functions: {len(registry)}")
-	for name in sorted(registry.keys()):
-		print(f"  - {name}")
-	
-	print(f"\nTotal registered schemas: {len(schemas)}")
-	for schema in schemas:
-		print(f"  - {schema['function']['name']}")
-	
-	return {
-		"function_count": len(registry),
-		"schema_count": len(schemas),
-		"functions": list(registry.keys()),
-		"schemas": [s['function']['name'] for s in schemas]
-	}
-
-# Register the functions with the capabilities system
-register_function_in_registry("set_debug_mode", set_debug_mode)
-register_function_in_registry("inspect_registry", inspect_registry)
-
-# Register the function schemas
-set_debug_schema = {
-	"function": {
-		"name": "set_debug_mode",
-		"description": "Enable or disable VORTEX's debug mode",
-		"parameters": {
-			"type": "object",
-			"properties": {
-				"mode": {
-					"type": "boolean",
-					"description": "Set to true to enable debug mode, false to disable it"
-				}
-			},
-			"required": ["mode"]
+	try:
+		# Import here to avoid circular import
+		from src.Boring.capabilities import get_function_registry, get_function_schemas
+		
+		registry = get_function_registry()
+		schemas = get_function_schemas()
+		
+		available_functions = list(registry.keys())
+		available_functions.sort()  # Sort for easier reading
+		
+		result = {
+			"available_functions": available_functions,
+			"function_count": len(available_functions),
+			"schema_count": len(schemas)
 		}
-	}
-}
+		
+		return result
+	except Exception as e:
+		return f"Error inspecting registry: {e}"
 
-inspect_registry_schema = {
-	"function": {
-		"name": "inspect_registry",
-		"description": "Inspect the current state of the function registry and schemas",
-		"parameters": {
-			"type": "object",
-			"properties": {},
-			"required": []
-		}
-	}
-}
-
-register_function_schema(set_debug_schema)
-register_function_schema(inspect_registry_schema)
+# These will be imported by capabilities.py later, we don't register here
+# to avoid circular imports

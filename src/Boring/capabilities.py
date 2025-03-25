@@ -3,40 +3,44 @@ import importlib.util
 import sys
 import inspect
 
-# Track if initialization has already occurred
-_initialization_complete = False
-_modules_loaded = set()
-_registered_functions = set()
-_registered_schemas = set()
+# Track initialization status
+_registry_initialized = False
 
-# ✅ Ensure global function registry and schemas are always initialized
-if 'function_registry' not in globals():
-	function_registry = {}
+# Track modules that have been loaded
+_loaded_modules = set()
 
-if 'function_schemas' not in globals():
-	function_schemas = []
+# Initialize global registries
+function_registry = {}
+function_schemas = []
+
+# Debug counter for registrations
+_registration_count = 0
 
 def register_function_in_registry(name, func):
 	"""Registers a function in the global function registry."""
-	global function_registry
+	global function_registry, _registration_count
 	
-	# Check if function name already exists
-	if name not in function_registry:
-		function_registry[name] = func
-		print(f"[✅ REGISTERED] {name} in function registry.")
-	else:
-		# Get module name directly from the function if possible
-		module_name = getattr(func, "__module__", None)
-		if not module_name:
-			# Fallback to frame inspection
-			frame = inspect.currentframe().f_back
-			module_name = frame.f_globals.get('__name__', 'unknown')
-			
-		print(f"[⚠️ SKIPPED] Function {name} is already registered (from {module_name}).")
+	# Get calling module for tracking
+	frame = inspect.currentframe().f_back
+	module_name = frame.f_globals.get('__name__', 'unknown')
+	
+	# Create a unique key for this function registration
+	registration_key = f"{module_name}:{name}"
+	
+	# Skip if already registered from this module
+	if name in function_registry:
+		# Only print if in debug mode to reduce console spam
+		print(f"[⚠️ SKIPPED] Function {name} already registered (from {module_name})")
+		return
+		
+	# Register the function
+	function_registry[name] = func
+	_registration_count += 1
+	print(f"[✅ REGISTERED #{_registration_count}] {name} in function registry (from {module_name})")
 
 def register_function_schema(schema):
 	"""Registers a function schema in the global function schemas list."""
-	global function_schemas
+	global function_schemas, _registration_count
 	
 	# Ensure the schema has a type field
 	if 'type' not in schema:
@@ -44,21 +48,20 @@ def register_function_schema(schema):
 		
 	schema_name = schema["function"]["name"]
 
+	# Get calling module for tracking
+	frame = inspect.currentframe().f_back
+	module_name = frame.f_globals.get('__name__', 'unknown')
+	
 	# Check if schema already exists
 	existing_names = [s["function"]["name"] for s in function_schemas]
 	
 	if schema_name not in existing_names:
 		function_schemas.append(schema)
-		
-		# Get calling module - use callstack to get exact module
-		frame = inspect.currentframe().f_back
-		module_name = frame.f_globals.get('__name__', 'unknown')
-		print(f"[✅ SCHEMA REGISTERED] {schema_name} added to schemas (from {module_name}).")
+		_registration_count += 1
+		print(f"[✅ SCHEMA REGISTERED #{_registration_count}] {schema_name} (from {module_name})")
 	else:
-		# Get calling module
-		frame = inspect.currentframe().f_back
-		module_name = frame.f_globals.get('__name__', 'unknown')
-		print(f"[⚠️ SKIPPED] Schema for {schema_name} is already registered (from {module_name}).")
+		# Only print if in debug mode to reduce console spam
+		print(f"[⚠️ SKIPPED] Schema for {schema_name} already registered (from {module_name})")
 
 def get_function_registry():
 	"""Returns the global function registry."""
@@ -69,39 +72,53 @@ def get_function_schemas():
 	return function_schemas
 
 def initialize_capabilities():
-	"""Clears the function registry and auto-loads all Python files in the capabilities folder and its subdirectories."""
-	global _initialization_complete, function_registry, _modules_loaded
-	global _registered_functions, _registered_schemas
+	"""Initializes capability registry."""
+	global function_registry, function_schemas, _registry_initialized, _loaded_modules, _registration_count
 	
-	# If already initialized, don't clear registry again
-	if _initialization_complete:
-		print("[ℹ️ INFO] Capabilities already initialized, skipping reinitialization.")
+	# Print prominent message if re-initialization attempt
+	if _registry_initialized:
+		print("\n" + "="*80)
+		print(" NOTICE: Capabilities registry already initialized - SKIPPING reinitialization ")
+		print("="*80 + "\n")
 		return
+	
+	print("\n" + "="*80)
+	print(" Initializing capabilities registry (first time) ")
+	print("="*80 + "\n")
+	
+	# Clear everything on first initialization
+	function_registry.clear()
+	function_schemas.clear()
+	_loaded_modules.clear()
+	_registration_count = 0
+	
+	# Mark as initialized
+	_registry_initialized = True
+	
+	try:
+		# Check if using optional extras
+		use_optional_extras = os.environ.get("USE_OPTIONAL_EXTRAS", "false").lower() == "true"
+		print(f"[CONFIG] USE_OPTIONAL_EXTRAS = {use_optional_extras}")
 		
-	# ✅ Fix the case sensitivity issue by using the correct case
+		# Load capabilities
+		load_capabilities(use_optional_extras=use_optional_extras)
+		
+		# Manually register debug functions last to avoid circular imports
+		register_debug_functions()
+		
+		print("\n" + "="*80)
+		print(f" Capabilities initialization complete. Registered {_registration_count} items. ")
+		print("="*80 + "\n")
+	except Exception as e:
+		print(f"[ERROR] Failed to initialize capabilities: {e}")
+
+def load_capabilities(use_optional_extras=False):
+	"""Load all capability modules from the Capabilities directory."""
+	global _loaded_modules
+	
+	# Fix the case sensitivity issue by using the correct case
 	CAPABILITIES_DIR = "src/Capabilities"  # Capital C to match actual directory
 	
-	# Clear the function registry only on first initialization
-	function_registry.clear()
-	_registered_functions.clear()
-	_registered_schemas.clear()
-	print("Function registry cleared.")
-
-	# Check if optional extras should be loaded - simpler approach to avoid import issues
-	USE_OPTIONAL_EXTRAS = False
-	try:
-		# Check if the VORTEX module is already loaded
-		if 'VORTEX' in sys.modules:
-			USE_OPTIONAL_EXTRAS = getattr(sys.modules['VORTEX'], 'USE_OPTIONAL_EXTRAS', False)
-		else:
-			# Fall back to environment variable if available
-			USE_OPTIONAL_EXTRAS = os.environ.get('USE_OPTIONAL_EXTRAS', '').lower() == 'true'
-		
-		print(f"[CONFIG] USE_OPTIONAL_EXTRAS = {USE_OPTIONAL_EXTRAS}")
-	except Exception as e:
-		print(f"[⚠️ WARNING] Error checking USE_OPTIONAL_EXTRAS: {e}")
-		print("[⚠️ WARNING] Defaulting to not loading optional extras")
-
 	# Create a priority order for loading modules
 	def module_priority(file_path):
 		# Load debug_mode first, then local modules before external
@@ -117,8 +134,8 @@ def initialize_capabilities():
 	# Find all modules to load
 	module_paths = []
 	for root, dirs, files in os.walk(CAPABILITIES_DIR):
-		# Skip optional_extras directory if USE_OPTIONAL_EXTRAS is False
-		if not USE_OPTIONAL_EXTRAS and "optional_extras" in root:
+		# Skip optional_extras directory if not enabled
+		if not use_optional_extras and "optional_extras" in root:
 			print(f"[⚠️ SKIPPED] Optional extras directory: {root}")
 			continue
 			
@@ -132,17 +149,21 @@ def initialize_capabilities():
 				
 	# Load modules in priority order
 	for module_path in module_paths:
-		# Skip if we've already loaded this module
-		if module_path in _modules_loaded:
-			continue
-			
 		# Get relative path for import using correct module structure
 		rel_path = os.path.relpath(module_path, os.path.dirname(os.path.dirname(CAPABILITIES_DIR)))
 		rel_path = rel_path.replace("\\", "/")  # Normalize path separators for import
 		module_name = os.path.splitext(rel_path)[0].replace("/", ".")
 		
+		# Skip if already loaded
+		if module_name in _loaded_modules:
+			print(f"[⚠️ SKIPPED] Module already loaded: {module_name}")
+			continue
+			
+		# Mark as loaded before importing to prevent circular import issues
+		_loaded_modules.add(module_name)
+		
 		try:
-			print(f"Loading module: {module_name}")
+			print(f"[⏳ LOADING] Module: {module_name}")
 			spec = importlib.util.spec_from_file_location(module_name, module_path)
 			module = importlib.util.module_from_spec(spec)
 			
@@ -151,14 +172,11 @@ def initialize_capabilities():
 			
 			# Execute the module
 			spec.loader.exec_module(module)
-			
-			# Track loaded module to prevent reloading
-			_modules_loaded.add(module_path)
+			print(f"[✅ LOADED] Module: {module_name}")
 		except Exception as e:
-			print(f"Failed to load module '{os.path.basename(module_path)}': {str(e)[:100]}")
-	
-	# Mark initialization as complete
-	_initialization_complete = True
+			print(f"[❌ FAILED] Module '{os.path.basename(module_path)}': {str(e)[:100]}")
+			# Remove from loaded modules if it failed
+			_loaded_modules.remove(module_name)
 
 def persist_dynamic_function(function_name, function_code):
 	"""Writes a dynamically registered function to a separate file in the Capabilities folder."""
@@ -176,4 +194,79 @@ def persist_dynamic_function(function_name, function_code):
 	with open(function_file, "w", encoding="utf-8") as f:
 		f.write(function_code)
 	print(f"[💾 PERSIST] Function '{function_name}' saved to '{function_file}'")
+
+# Functions to help with debugging
+def get_initialization_status():
+	"""Returns the current initialization status for debugging."""
+	return {
+		"initialized": _registry_initialized,
+		"registered_functions": len(function_registry),
+		"registered_schemas": len(function_schemas),
+		"loaded_modules": len(_loaded_modules),
+		"registration_count": _registration_count
+	}
+
+def register_debug_functions():
+	"""Register debug-related functions after other modules are loaded."""
+	try:
+		from src.Capabilities.debug_mode import debugmode, set_debug_mode, inspect_registry
+		
+		# Register the functions
+		register_function_in_registry("debugmode", debugmode)
+		register_function_in_registry("set_debug_mode", set_debug_mode)
+		register_function_in_registry("inspect_registry", inspect_registry)
+		
+		# Register the schemas
+		register_function_schema({
+			"type": "function",
+			"function": {
+				"name": "debugmode",
+				"description": "Toggles or sets debug mode",
+				"parameters": {
+					"type": "object",
+					"properties": {
+						"enable": {
+							"type": "boolean",
+							"description": "True to enable, False to disable, omit to toggle"
+						}
+					},
+					"required": []
+				}
+			}
+		})
+		
+		register_function_schema({
+			"type": "function",
+			"function": {
+				"name": "set_debug_mode",
+				"description": "Enable or disable VORTEX's debug mode",
+				"parameters": {
+					"type": "object",
+					"properties": {
+						"enable": {
+							"type": "boolean",
+							"description": "Set to true to enable debug mode, false to disable it"
+						}
+					},
+					"required": ["enable"]
+				}
+			}
+		})
+		
+		register_function_schema({
+			"type": "function",
+			"function": {
+				"name": "inspect_registry",
+				"description": "Inspect the current state of the function registry and schemas",
+				"parameters": {
+					"type": "object",
+					"properties": {},
+					"required": []
+				}
+			}
+		})
+		
+		print("[✅ REGISTERED] Debug functions added to registry")
+	except Exception as e:
+		print(f"[❌ ERROR] Could not register debug functions: {e}")
 

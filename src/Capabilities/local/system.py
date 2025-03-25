@@ -10,6 +10,11 @@ import markdown
 import webbrowser
 from src.Capabilities.debug_mode import get_debug_mode
 
+# ANSI color codes for terminal output
+COLOR_RED = "\033[91m"
+COLOR_GREEN = "\033[92m"
+COLOR_RESET = "\033[0m"
+
 def open_link(url: str):
 	"""
 	Opens a URL in the default web browser.
@@ -21,10 +26,13 @@ def open_link(url: str):
 	- str: Success or error message
 	"""
 	try:
+		if not (url.startswith("http://") or url.startswith("https://")):
+			url = "https://" + url
+		
 		webbrowser.open(url)
 		return f"✅ Opened {url} in your default browser."
 	except Exception as e:
-		return f"❌ Error opening URL: {e}"
+		return f"❌ Error opening link: {e}"
 
 def display_markdown(content: str):
 	"""
@@ -185,13 +193,27 @@ def read_vortex_code(filename: str, max_file_size: int = 5000):
 
 def restart_vortex():
 	"""Restarts VORTEX to apply new capabilities and reload memory."""
+	print(f"\n{COLOR_RED}[⚠️ WARNING] Restart function was called.{COLOR_RESET}")
+	
+	# Add a manual confirmation to prevent unexpected restarts
+	try:
+		confirm = input("Are you sure you want to restart VORTEX? (y/n): ").strip().lower()
+		if confirm != 'y':
+			print("[✓] Restart cancelled.")
+			return False
+	except Exception as e:
+		print(f"[ERROR] Failed to get confirmation: {e}")
+		print("[✓] Restart cancelled.")
+		return False
+	
 	print("[🔄 RESTARTING VORTEX...]")
-
-	# ✅ Give the user time to see the restart message
+	# Give the user time to see the restart message
 	time.sleep(2)
 
-	# ✅ Restart the Python process
+	# Restart the Python process
 	os.execl(sys.executable, sys.executable, *sys.argv)
+	
+	return True  # This line is never reached but added for completeness
 
 def shutdown_vortex():
 	"""Shuts down VORTEX."""

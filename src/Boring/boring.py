@@ -139,6 +139,16 @@ async def call_openai():
 					continue
 
 				try:
+					# Special safety check for restart function (keep this safety feature)
+					if function_name == "restart_vortex":
+						print(f"{COLOR_RED}[⚠️ WARNING] Refusing automatic restart from API function call{COLOR_RESET}")
+						tool_responses.append({
+							"role": "tool",
+							"tool_call_id": function_call_id,
+							"content": json.dumps({"error": "Automatic restart from API call is not allowed for safety reasons. Please restart manually if needed."})
+						})
+						continue
+						
 					if inspect.iscoroutinefunction(function_to_call):
 						function_result = await function_to_call(**function_args)
 					else:
@@ -177,6 +187,7 @@ async def call_openai():
 	if get_debug_mode():
 		print("[🛑 EXITING] Finalizing response; no further function calls.")
 	return "I'm sorry, but I encountered an issue processing your request."
+
 # ------------------------------
 # Conversation History Helpers
 # ------------------------------
