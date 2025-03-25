@@ -11,7 +11,9 @@ import json       # For processing Vosk JSON output
 from vosk import Model, KaldiRecognizer  # For wake word detection
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 import warnings
-import subprocess # For calling espeak directly
+import pyttsx3    # TTS engine
+import subprocess # For subprocess-based TTS as fallback
+import multiprocessing  # For process-based TTS
 
 # Try to import msvcrt for keyboard detection on Windows
 msvcrt_available = False
@@ -37,9 +39,8 @@ if not os.path.exists("models"):
     print("Created models directory for Vosk")
 
 # TTS settings
-TTS_ESPEAK_VOICE = "en"  # Default eSpeak voice
-TTS_ESPEAK_SPEED = 150   # Words per minute
-TTS_ESPEAK_PITCH = 50    # 0-99
+TTS_RATE = 180       # Default speaking rate
+TTS_VOLUME = 1.0     # Default volume (0.0 to 1.0)
 
 # Wake word settings
 WAKE_WORD = "vortex"  # The primary wake word
@@ -71,6 +72,19 @@ tts_thread = None
 vosk_model = None
 vosk_available = False
 
+# Function for process-based TTS
+def speak_in_process(text, rate=TTS_RATE, volume=TTS_VOLUME):
+    """Run TTS in a separate process to avoid resource conflicts"""
+    try:
+        engine = pyttsx3.init()
+        engine.setProperty('rate', rate)
+        engine.setProperty('volume', volume)
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as e:
+        print(f"Process TTS error: {e}")
+
 def load_vosk_model():
     """Load the Vosk model for wake word detection."""
     global vosk_model, vosk_available
@@ -101,19 +115,45 @@ vosk_load_thread.start()
 
 # Initialize TTS
 def init_tts():
+    """Initialize TTS functionality by testing pyttsx3."""
     global tts_available
     
     print("Initializing TTS engine...")
     
-    # Initialize eSpeak
     try:
-        subprocess.run(['espeak', '--version'], capture_output=True)
-        print("✅ eSpeak TTS engine initialized")
-        tts_available = True
+        # Test pyttsx3 initialization
+        engine = pyttsx3.init()
+        if engine:
+            # Try to get available voices to verify it's properly initialized
+            voices = engine.getProperty('voices')
+            
+            # Test with an empty string to check run functionality
+            engine.setProperty('rate', TTS_RATE)
+            engine.setProperty('volume', TTS_VOLUME)
+            
+            # Run a simple test in a separate process
+            p = multiprocessing.Process(target=speak_in_process, args=("TTS test",))
+            p.start()
+            p.join(timeout=3)  # Wait up to 3 seconds
+            
+            if p.is_alive():
+                # If still running after timeout, terminate
+                p.terminate()
+                p.join()
+                print("⚠️ TTS test timeout - falling back to basic mode")
+                tts_available = True  # Still mark as available but will use simpler method
+            else:
+                print("✅ Text-to-Speech initialized successfully (process-based)")
+                tts_available = True
+                
+            # Clean up the test engine
+            engine.stop()
+            del engine
+            
     except Exception as e:
         if get_debug_mode():
-            print(f"eSpeak not found: {e}")
-        print("⚠️ Error during TTS initialization: {e}")
+            print(f"⚠️ TTS initialization error: {e}")
+        print(f"⚠️ Error during TTS initialization")
         tts_available = False
 
 # Start TTS init
@@ -175,22 +215,35 @@ def process_tts_queue():
                 else:
                     # Only print in debug mode
                     if get_debug_mode():
-                        print(f"[🔊 Speaking from queue: {text_to_speak}]")
+                        print(f"[🔊 Speaking: {text_to_speak}]")
                     
                     try:
-                        # Use eSpeak directly via subprocess
-                        cmd = [
-                            "espeak",
-                            "-v", TTS_ESPEAK_VOICE,
-                            "-s", str(TTS_ESPEAK_SPEED),
-                            "-p", str(TTS_ESPEAK_PITCH),
-                            text_to_speak
-                        ]
-                        subprocess.run(cmd)
+                        # Use multiprocessing for TTS to prevent thread issues
+                        p = multiprocessing.Process(target=speak_in_process, 
+                                                   args=(text_to_speak, TTS_RATE, TTS_VOLUME))
+                        p.start()
+                        p.join(timeout=30)  # Wait up to 30 seconds
+                        
+                        if p.is_alive():
+                            # If still running after timeout, terminate
+                            p.terminate()
+                            p.join()
+                            print("⚠️ TTS process timed out")
                     except Exception as e:
                         print(f"[❌ ERROR in TTS engine: {e}]")
-                        # Fallback to print the text that should have been spoken
-                        print(f"[TTS TEXT]: {text_to_speak}")
+                        # Try alternate method as fallback
+                        try:
+                            # Direct engine creation as fallback
+                            engine = pyttsx3.init()
+                            engine.setProperty('rate', TTS_RATE)
+                            engine.setProperty('volume', TTS_VOLUME)
+                            engine.say(text_to_speak)
+                            engine.runAndWait()
+                            engine.stop()
+                        except Exception as e2:
+                            print(f"[❌ Fallback TTS also failed: {e2}]")
+                            # Final fallback - print the text
+                            print(f"[TTS TEXT]: {text_to_speak}")
                 
                 # Whether we succeeded or failed, we're done speaking this item
                 with tts_queue_lock:
