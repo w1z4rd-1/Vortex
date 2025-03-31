@@ -242,21 +242,104 @@ async def call_ai_provider():
                     if not ai_client:
                         raise ConnectionError("Ollama client missing")
                     
-                    # Use the Ollama client's chat method
+                    # Use the Ollama client's chat method with tools
                     response = await ai_client.chat(
                         model=OLLAMA_MODEL,
                         messages=truncated_history,
+                        tools=tools_param,  # Pass the tools parameter
                         stream=False
                     )
                     
-                    # Extract the content directly using the API
-                    assistant_message_content = response['message']['content']
-                    
-                    # Add the assistant's response to conversation history
-                    conversation_history.append({"role": "assistant", "content": assistant_message_content})
-                    
-                    # Return the response
-                    return assistant_message_content
+                    # Check for tool calls
+                    if response.message.tool_calls:
+                        if get_debug_mode(): 
+                            print(f"[🛠️ OLLAMA TOOL CALLS] Detected {len(response.message.tool_calls)} tool calls")
+                        
+                        # Save the assistant message with tool calls
+                        assistant_message = {
+                            "role": "assistant", 
+                            "content": response.message.content,
+                            "tool_calls": response.message.tool_calls
+                        }
+                        conversation_history.append(assistant_message)
+                        
+                        # Process tool calls
+                        assistant_tool_calls = response.message.tool_calls
+                        tool_responses_for_api = []
+                        function_registry = get_function_registry()
+                        
+                        for tool_call in assistant_tool_calls:
+                            function_name = tool_call.function.name
+                            function_args = tool_call.function.arguments
+                            
+                            if get_debug_mode(): 
+                                print(f"[🛠️ TOOL CALL] Name: {function_name}, Args: {function_args}")
+                            
+                            function_to_call = function_registry.get(function_name)
+                            result_content_json = ""
+                            
+                            # Execute function and get result
+                            if not function_to_call:
+                                print(f"{COLOR_RED}[❌ MISSING FN] '{function_name}' not found.{COLOR_RESET}")
+                                result_content_json = json.dumps({"error": f"Function '{function_name}' not registered."})
+                            else:
+                                try:
+                                    if inspect.iscoroutinefunction(function_to_call):
+                                        function_result = await function_to_call(**function_args)
+                                    else:
+                                        loop = asyncio.get_running_loop()
+                                        function_result = await loop.run_in_executor(None, lambda: function_to_call(**function_args))
+                                    
+                                    try: 
+                                        result_content_json = json.dumps(function_result)
+                                    except TypeError: 
+                                        result_content_json = json.dumps({"result": str(function_result)})
+                                    
+                                    if get_debug_mode(): 
+                                        print(f"[✅ FN SUCCESS] Function: {function_name} -> {result_content_json[:100]}...")
+                                except Exception as e:
+                                    print(f"{COLOR_RED}[❌ FN ERROR] Function: {function_name}: {e}{COLOR_RESET}")
+                                    result_content_json = json.dumps({"error": f"Execution failed: {str(e)}"})
+                            
+                            # Add tool response to history
+                            tool_responses_for_api.append({
+                                "role": "tool",
+                                "name": function_name,
+                                "content": result_content_json
+                            })
+                        
+                        # Add tool responses to conversation history
+                        if tool_responses_for_api:
+                            conversation_history.extend(tool_responses_for_api)
+                            
+                            # Get final response with tool results
+                            try:
+                                final_response = await ai_client.chat(
+                                    model=OLLAMA_MODEL,
+                                    messages=conversation_history[-max_history:] if len(conversation_history) > max_history else conversation_history,
+                                    stream=False
+                                )
+                                
+                                # Extract the final content
+                                assistant_message_content = final_response.message.content
+                                
+                                # Add final response to history
+                                conversation_history.append({"role": "assistant", "content": assistant_message_content})
+                                
+                                # Return the final response
+                                return assistant_message_content
+                            except Exception as e:
+                                print(f"{COLOR_RED}[ERROR] Final Ollama response error: {str(e)}{COLOR_RESET}")
+                                return f"I'm sorry, an error occurred processing tool results with Ollama: {str(e)}"
+                    else:
+                        # No tool calls, just extract content normally
+                        assistant_message_content = response.message.content
+                        
+                        # Add the assistant's response to conversation history
+                        conversation_history.append({"role": "assistant", "content": assistant_message_content})
+                        
+                        # Return the response
+                        return assistant_message_content
                     
                 except Exception as e:
                     print(f"{COLOR_RED}[ERROR] Ollama API error: {str(e)}{COLOR_RESET}")
