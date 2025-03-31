@@ -274,7 +274,7 @@ capabilities.register_function_schema({
 	"type": "function",
 	"function": {
 		"name": "get_weather_forecast",
-		"description": "Gets weather forecast for a specific location.",
+		"description": "Gets weather forecast for a specific location, to get the users location, use get_user_info first",
 		"parameters": {
 			"type": "object",
 			"properties": {

@@ -15,7 +15,26 @@ import multiprocessing  # For process-based TTS
 from vosk import Model, KaldiRecognizer  # For wake word detection
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
 from pydub import AudioSegment
+from openai import AsyncOpenAI
+from dotenv import load_dotenv
+import asyncio
+import requests
 
+# Load environment variables
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower()
+
+# Initialize OpenAI client if using OpenAI
+openai_client = None
+if AI_PROVIDER == "openai":
+    if not OPENAI_API_KEY:
+        print("[ERROR] OPENAI_API_KEY missing but AI_PROVIDER='openai'")
+    else:
+        openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+COLOR_GREEN = "\033[92m"
+COLOR_RESET = "\033[0m"
 # Try to import msvcrt for keyboard detection on Windows
 msvcrt_available = False
 try:
@@ -70,6 +89,10 @@ tts_thread = None
 # Load Vosk model if available
 vosk_model = None
 vosk_available = False
+
+# Add near the top with other OpenAI setup
+TTS_MODEL = "tts-1"  # OpenAI's TTS model
+TTS_VOICE = "nova"   # OpenAI's voice option
 
 # Function for process-based TTS
 def speak_in_process(text, rate=TTS_RATE, volume=TTS_VOLUME):
@@ -178,7 +201,60 @@ def tts_speak(text):
     if not text or text.strip() == "":
         return
     
-    # Add to queue
+    # If using OpenAI, handle TTS differently
+    if AI_PROVIDER == "openai" and openai_client:
+        try:
+            # Create temp directory if it doesn't exist
+            if not os.path.exists("temp"):
+                os.makedirs("temp", exist_ok=True)
+            
+            # Generate speech using OpenAI's TTS
+            speech_file_path = "temp/tts_output.mp3"
+            
+            # Instead of creating a new event loop, use a synchronous approach
+            # Use the requests library directly to avoid asyncio conflicts
+            
+            # Print debug info
+            if get_debug_mode():
+                print(f"[🔊 OpenAI TTS] Generating speech for: {text[:50]}...")
+            
+            # OpenAI API key for authorization
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}"
+            }
+            
+            # API endpoint for TTS
+            url = "https://api.openai.com/v1/audio/speech"
+            
+            # Request body
+            data = {
+                "model": TTS_MODEL,
+                "voice": TTS_VOICE,
+                "input": text
+            }
+            
+            # Make the API request
+            response = requests.post(url, headers=headers, json=data)
+            
+            if response.status_code == 200:
+                # Save the audio to a file
+                with open(speech_file_path, "wb") as f:
+                    f.write(response.content)
+                
+                if get_debug_mode():
+                    print(f"[✅ OpenAI TTS] Generated audio saved to {speech_file_path}")
+                
+                # Play the generated audio
+                play_audio(speech_file_path)
+                return
+            else:
+                print(f"[ERROR] OpenAI TTS API request failed with status {response.status_code}: {response.text}")
+                # Fall through to local TTS as backup
+        except Exception as e:
+            print(f"[ERROR] OpenAI TTS failed: {e}. Falling back to local TTS.")
+            # Fall through to local TTS as backup
+    
+    # Local TTS handling (existing code)
     with tts_queue_lock:
         tts_queue.append(text)
         if get_debug_mode():
@@ -245,6 +321,12 @@ def process_tts_queue():
 def is_tts_available():
     """Check if TTS is available and working."""
     global tts_available
+    
+    # If using OpenAI, check if client is initialized
+    if AI_PROVIDER == "openai":
+        return openai_client is not None
+    
+    # Otherwise check local TTS
     return tts_available
 
 def wait_for_tts_completion(timeout=30):
@@ -283,138 +365,105 @@ def detect_wake_word(return_buffer=False):
     """
     Detects wake word using Vosk speech recognition.
     Listens for "vortex" or similar variations in speech input.
-    
+
     Args:
         return_buffer: If True, returns a pre-buffer of audio data after wake word detection
-        
+
     Returns:
         If return_buffer=False: True if wake word detected, False otherwise
         If return_buffer=True: (True, audio_buffer) if wake word detected, (False, None) otherwise
     """
-    # Check for Vosk library
     try:
         from vosk import Model, KaldiRecognizer
         import json
     except ImportError:
         print("[ERROR] Vosk not installed for wake word detection")
-        return True
-    
-    # Check if model exists
+        return False # Return False on import error
+
     model_path = os.path.join("models", "vosk-model-small-en-us-0.15")
     if not os.path.exists(model_path):
         print("[ERROR] Vosk model not found. Download from: https://alphacephei.com/vosk/models")
-        return True
-    
+        # If no model, maybe fallback to keyboard? For now, return False
+        return False
+
     if get_debug_mode():
-        print(f"[DEBUG] Listening for wake word 'VORTEX'...")
-    else:
-        # Always show this basic instruction
-        print("[Say 'VORTEX' to activate]")
-    
-    # Audio parameters for Vosk - reduced chunk size for faster response
-    CHUNK = 2048  # Reduced from 4096 to 2048 for more responsive detection
+        print(f"[DEBUG] Listening for wake word '{WAKE_WORD}' (and variations)...")
+    # Don't print basic instruction here, VORTEX.py does it.
+
+    CHUNK = 2048
     FORMAT = pyaudio.paInt16
     CHANNELS = 1
     RATE = 16000
-    
+
     p = None
     stream = None
-    
+
     try:
         p = pyaudio.PyAudio()
-        
-        # Open audio stream
-        stream = p.open(format=FORMAT, 
-                      channels=CHANNELS, 
-                      rate=RATE, 
-                      input=True, 
+        stream = p.open(format=FORMAT,
+                      channels=CHANNELS,
+                      rate=RATE,
+                      input=True,
                       frames_per_buffer=CHUNK)
-        
-        # Load Vosk model for speech recognition
+
         model = Model(model_path)
         recognizer = KaldiRecognizer(model, RATE)
-        recognizer.SetWords(True)  # Enable word timestamps
-        
-        # Main detection loop
+        recognizer.SetWords(True)
+
         while True:
-            # Read audio chunk with error handling
             try:
                 data = stream.read(CHUNK, exception_on_overflow=False)
             except IOError as e:
-                if get_debug_mode():
-                    print(f"[WARNING] Audio stream read error: {e}")
+                if get_debug_mode(): print(f"[WARNING] Audio stream read error: {e}")
                 continue
-            
-            # Process with Vosk - check partial results FIRST for faster response
-            # Check partial results - these are more immediate and processed faster
+
             partial = json.loads(recognizer.PartialResult())
             if "partial" in partial and partial["partial"]:
                 partial_text = partial["partial"].lower()
-                
-                # Check for wake word in partial recognition
                 for variation in WAKE_WORD_VARIATIONS:
                     if variation in partial_text:
                         detected_variation = variation
-                        # Always show wake word detection - this is essential
-                        print(f"[Wake word '{detected_variation}' detected!]")
+                        print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected!]{COLOR_RESET}") # Keep this confirmation
                         return True
-            
-            # Only check full results if no wake word found in partials
+
             if recognizer.AcceptWaveform(data):
-                # Full recognition result
                 result = json.loads(recognizer.Result())
-                
                 if "text" in result and result["text"]:
                     text = result["text"].lower()
-                    if get_debug_mode():
-                        print(f"[Heard]: {text}")
-                    
-                    # Check for wake word variations
+                    # --- VOICE.PY CHANGE POINT 1: Remove '[Heard]:' debug print ---
+                    # if get_debug_mode():
+                    #     print(f"[Heard]: {text}") # REMOVED THIS LINE
+                    # --- End Change Point 1 ---
+
                     for variation in WAKE_WORD_VARIATIONS:
                         if variation in text:
                             detected_variation = variation
-                            # Always show wake word detection - this is essential
-                            print(f"[Wake word '{detected_variation}' detected!]")
+                            print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected!]{COLOR_RESET}") # Keep this confirmation
                             return True
-            
-            # Check for keyboard interrupt (Enter key) as alternative
-            if msvcrt_available:
-                if msvcrt.kbhit():
-                    key = msvcrt.getch()
-                    if key == b'\r':  # Enter key
-                        print("[VORTEX activated via Enter key]")
-                        return True
-                
+
+            # Check keyboard only if available
+            if msvcrt_available and msvcrt.kbhit():
+                 key = msvcrt.getch()
+                 if key == b'\r':
+                     print("[VORTEX activated via Enter key]")
+                     return True
+
     except KeyboardInterrupt:
         print("\n[KeyboardInterrupt in wake word detector]")
+        return False # Indicate stop
     except Exception as e:
-        if get_debug_mode():
-            print(f"[ERROR] Wake word detection error: {e}")
-        else:
-            print("[ERROR] Wake word detection failed")
+        if get_debug_mode(): print(f"[ERROR] Wake word detection error: {e}")
+        else: print("[ERROR] Wake word detection failed")
+        return False # Indicate error, let main loop retry
     finally:
-        # Clean up resources
         if stream is not None:
-            try:
-                stream.stop_stream()
-                stream.close()
-            except Exception as e:
-                if get_debug_mode():
-                    print(f"[ERROR] Error closing stream: {e}")
-                
+            try: stream.stop_stream(); stream.close()
+            except Exception: pass
         if p is not None:
-            try:
-                p.terminate()
-            except Exception as e:
-                if get_debug_mode():
-                    print(f"[ERROR] Error terminating PyAudio: {e}")
-    
-    # If we reach here, something went wrong, but we should NOT restart VORTEX
-    # Just return False so the main loop will try again
-    if get_debug_mode():
-        print("[WARNING] Wake word detection failed, will retry...")
-    return False
+            try: p.terminate()
+            except Exception: pass
 
+    return False # Default return if loop exits unexpectedly
 # ------------------------------
 # Audio Playback
 # ------------------------------
@@ -626,12 +675,30 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
 
     return filename
 
-def transcribe_audio(audio_path):
-    """Transcribes the audio file using Vosk for offline speech recognition."""
+async def transcribe_audio(audio_path):
+    """
+    Transcribes the audio file using either Whisper (OpenAI) or Vosk (offline).
+    Returns the transcription text or None on error.
+    """
     if get_debug_mode():
         print(f"[Transcribing audio: {audio_path}]")
     
-    # Check if Vosk is available
+    # Check if we should use OpenAI's Whisper
+    if AI_PROVIDER == "openai" and openai_client:
+        try:
+            with open(audio_path, "rb") as audio_file:
+                transcription = await openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                )
+                transcript = transcription.text.strip()
+                print(f"[Transcription]: '{transcript}'")
+                return transcript if transcript else "I didn't catch that"
+        except Exception as e:
+            print(f"[ERROR] OpenAI transcription failed: {e}")
+            return None
+    
+    # Fallback to Vosk for offline transcription
     try:
         from vosk import Model, KaldiRecognizer
         import json
@@ -676,7 +743,6 @@ def transcribe_audio(audio_path):
             transcript += " " + final_result["text"]
         
         transcript = transcript.strip()
-        # Always show the transcription result, as this is essential information
         print(f"[Transcription]: '{transcript}'")
         
         return transcript if transcript else "I didn't catch that"

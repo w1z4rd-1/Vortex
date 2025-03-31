@@ -8,6 +8,7 @@ import subprocess
 import time
 from dotenv import load_dotenv
 from src.Capabilities.debug_mode import get_debug_mode
+import requests
 
 # Constants
 JSON_PATH = "powershell.json"
@@ -75,38 +76,36 @@ def powershell(permission: bool = False, command: str = "", returnoutput: bool =
 		return f"❌ Error executing command: {e}"
 
 def get_user_info():
-	"""Retrieves information about the current user and system."""
-	try:
-		# Get username
-		username = powershell(True, "echo $env:USERNAME")
-		
-		# Get computer name
-		computer_name = powershell(True, "echo $env:COMPUTERNAME")
-		
-		# Get Windows version
-		windows_version = powershell(True, "(Get-WmiObject -class Win32_OperatingSystem).Caption")
-		
-		# Get current directory
-		current_dir = powershell(True, "Get-Location | Select-Object -ExpandProperty Path")
-		
-		# Get system uptime
-		uptime_script = "((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).ToString('dd\\.hh\\:mm\\:ss')"
-		system_uptime = powershell(True, uptime_script)
-		
-		# Format the information
-		user_info = f"""
-		✅ System Information:
-		👤 Username: {username}
-		💻 Computer Name: {computer_name}
-		🏠 Current Directory: {current_dir}
-		🖥️ Windows Version: {windows_version}
-		⏱️ System Uptime: {system_uptime}
-		"""
-		
-		return user_info.strip()
-	
-	except Exception as e:
-		return f"❌ Error retrieving user information: {e}"
+    """Fetches user location details based on their public IP address using ip-api.com."""
+    try:
+        ip_response = requests.get("https://api64.ipify.org?format=json")
+        ip_address = ip_response.json().get("ip")
+
+        if not ip_address:
+            return "Unable to retrieve IP address."
+
+        geo_url = f"http://ip-api.com/json/{ip_address}?fields=status,message,country,region,regionName,city,zip,lat,lon,timezone,offset,mobile,query"
+        geo_response = requests.get(geo_url)
+        geo_data = geo_response.json()
+
+        if geo_data.get("status") != "success":
+            return f"Geolocation lookup failed: {geo_data.get('message', 'Unknown error')}"
+
+        return {
+            "ip": geo_data.get("query"),
+            "city": geo_data.get("city"),
+            "region": geo_data.get("regionName"),
+            "country": geo_data.get("country"),
+            "zip": geo_data.get("zip"),
+            "timezone": geo_data.get("timezone"),
+            "utc_offset": geo_data.get("offset"),
+            "latitude": geo_data.get("lat"),
+            "longitude": geo_data.get("lon"),
+            "mobile_network": geo_data.get("mobile")
+        }
+
+    except Exception as e:
+        return f"Error retrieving user location: {str(e)}"
 
 # Register functions and schemas
 capabilities.register_function_in_registry("powershell", powershell)
@@ -142,7 +141,7 @@ capabilities.register_function_schema({
 	"type": "function",
 	"function": {
 		"name": "get_user_info",
-		"description": "Retrieves information about the current user and system.",
+		"description": "Retrieves information About the user bassed on their ip adress, including latatude and longitude",
 		"parameters": {
 			"type": "object",
 			"properties": {},
