@@ -201,6 +201,9 @@ def tts_speak(text):
     if not text or text.strip() == "":
         return
     
+    # Visual indicator that VORTEX is speaking
+    print(f"{COLOR_GREEN}[🔊 VORTEX Speaking...]{COLOR_RESET}")
+    
     # If using OpenAI, handle TTS differently
     if AI_PROVIDER == "openai" and openai_client:
         try:
@@ -309,6 +312,15 @@ def process_tts_queue():
                 # Whether we succeeded or failed, we're done speaking this item
                 with tts_queue_lock:
                     tts_is_speaking = False
+                    
+                # Visual indicator when finished speaking
+                if tts_queue:
+                    # More to speak
+                    if get_debug_mode():
+                        print(f"{COLOR_GREEN}[🔄 VORTEX continuing...]{COLOR_RESET}")
+                else:
+                    # Done with all speech
+                    print(f"{COLOR_GREEN}[✓ VORTEX finished speaking]{COLOR_RESET}")
             
             # Small pause before checking again
             time.sleep(0.1)
@@ -361,13 +373,14 @@ def wait_for_tts_completion(timeout=30):
 # ------------------------------
 # Wake Word Detection Options
 # ------------------------------
-def detect_wake_word(return_buffer=False):
+def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
     """
     Detects wake word using Vosk speech recognition.
     Listens for "vortex" or similar variations in speech input.
 
     Args:
         return_buffer: If True, returns a pre-buffer of audio data after wake word detection
+        ignore_if_speaking: If True, ignores wake word detections if TTS is currently speaking
 
     Returns:
         If return_buffer=False: True if wake word detected, False otherwise
@@ -380,6 +393,14 @@ def detect_wake_word(return_buffer=False):
         print("[ERROR] Vosk not installed for wake word detection")
         return False # Return False on import error
 
+    # Check if TTS is currently active - if it is, avoid wake word detection when requested
+    if ignore_if_speaking:
+        with tts_queue_lock:
+            if tts_is_speaking or tts_queue:
+                if get_debug_mode():
+                    print("[DEBUG] Ignoring potential wake word - TTS is active")
+                return False
+    
     model_path = os.path.join("models", "vosk-model-small-en-us-0.15")
     if not os.path.exists(model_path):
         print("[ERROR] Vosk model not found. Download from: https://alphacephei.com/vosk/models")
@@ -417,29 +438,60 @@ def detect_wake_word(return_buffer=False):
                 if get_debug_mode(): print(f"[WARNING] Audio stream read error: {e}")
                 continue
 
+            # Check TTS status periodically during wake word detection
+            if ignore_if_speaking:
+                with tts_queue_lock:
+                    if tts_is_speaking or tts_queue:
+                        if get_debug_mode():
+                            print("[DEBUG] TTS started speaking, exiting wake word detection")
+                        return False
+
             partial = json.loads(recognizer.PartialResult())
             if "partial" in partial and partial["partial"]:
                 partial_text = partial["partial"].lower()
                 for variation in WAKE_WORD_VARIATIONS:
-                    if variation in partial_text:
-                        detected_variation = variation
-                        print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected!]{COLOR_RESET}") # Keep this confirmation
-                        return True
+                    # More precise matching - match whole words rather than substrings
+                    # This prevents false positives from words containing the wake word
+                    words = partial_text.split()
+                    if variation in words:
+                        # Get confidence if available
+                        confidence = 1.0  # Default high confidence
+                        if "result" in partial and partial["result"]:
+                            for word_info in partial["result"]:
+                                if word_info.get("word", "").lower() == variation:
+                                    confidence = word_info.get("conf", 1.0)
+                                    break
+                        
+                        if confidence >= WAKE_WORD_CONFIDENCE:
+                            detected_variation = variation
+                            print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected! (Confidence: {confidence:.2f})]{COLOR_RESET}")
+                            return True
+                        elif get_debug_mode():
+                            print(f"[DEBUG] Low confidence wake word detection: {variation} ({confidence:.2f})")
 
             if recognizer.AcceptWaveform(data):
                 result = json.loads(recognizer.Result())
                 if "text" in result and result["text"]:
                     text = result["text"].lower()
-                    # --- VOICE.PY CHANGE POINT 1: Remove '[Heard]:' debug print ---
-                    # if get_debug_mode():
-                    #     print(f"[Heard]: {text}") # REMOVED THIS LINE
-                    # --- End Change Point 1 ---
-
+                    words = text.split()
+                    
                     for variation in WAKE_WORD_VARIATIONS:
-                        if variation in text:
-                            detected_variation = variation
-                            print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected!]{COLOR_RESET}") # Keep this confirmation
-                            return True
+                        # More precise matching - match whole words 
+                        if variation in words:
+                            # Get confidence if available
+                            confidence = 1.0  # Default high confidence
+                            if "result" in result:
+                                for word_info in result["result"]:
+                                    if word_info.get("word", "").lower() == variation:
+                                        confidence = word_info.get("conf", 1.0)
+                                        break
+                            
+                            if confidence >= WAKE_WORD_CONFIDENCE:
+                                detected_variation = variation
+                                print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected! (Confidence: {confidence:.2f})]{COLOR_RESET}")
+                                return True
+                            elif get_debug_mode():
+                                print(f"[DEBUG] Low confidence wake word detection: {variation} ({confidence:.2f})")
 
             # Check keyboard only if available
             if msvcrt_available and msvcrt.kbhit():
@@ -464,6 +516,7 @@ def detect_wake_word(return_buffer=False):
             except Exception: pass
 
     return False # Default return if loop exits unexpectedly
+
 # ------------------------------
 # Audio Playback
 # ------------------------------

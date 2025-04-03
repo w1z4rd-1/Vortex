@@ -106,18 +106,33 @@ async def main():
     """Main asynchronous loop for VORTEX operation."""
     while True:
         try:
+            # --- VORTEX.PY CHANGE: Wait for TTS to complete before listening for wake word ---
+            # Make sure any previous TTS has finished before we start listening
+            await asyncio.sleep(0.1)  # Small delay to ensure TTS queue is updated
+            if is_tts_available():
+                if not wait_for_tts_completion(timeout=0.5):
+                    if get_debug_mode(): print("[DEBUG] Waiting for TTS to complete before listening...")
+                    while not wait_for_tts_completion(timeout=0.5):
+                        await asyncio.sleep(0.1)
+                    # Add a small pause after speech completion before listening
+                    await asyncio.sleep(0.3)
+            # --- End of VORTEX.PY CHANGE ---
+            
             print("[Waiting for wake word...]")
             
             try:
                 # Consider adding a timeout or making detect_wake_word async if it blocks indefinitely
-                wake_word_detected = detect_wake_word() # Assuming this is blocking for now
+                wake_word_detected = detect_wake_word(ignore_if_speaking=True) # Use the new parameter to ignore wake words when TTS is active
 
                 if wake_word_detected:
                     print("[Wake word detected! Listening for command...]")
                     
                     try:
                         if get_debug_mode(): print("[DEBUG] Starting audio recording...")
+                        # Visual indicator that VORTEX is actively listening
+                        print(f"{COLOR_BLUE}[🎤 VORTEX Listening...]{COLOR_RESET}")
                         audio_file = record_audio()
+                        print(f"{COLOR_BLUE}[✓ VORTEX Done Listening]{COLOR_RESET}")
                         if not audio_file or not os.path.exists(audio_file):
                             print(f"{COLOR_YELLOW}[AUDIO] No audio recorded or file not found.{COLOR_RESET}")
                             continue
