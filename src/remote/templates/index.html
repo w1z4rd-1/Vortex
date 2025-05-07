@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VORTEX Voice Assistant</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>VORTEX</h1>
+                <h2>Voice Assistant</h2>
+            </div>
+            <div class="controls">
+                <div class="toggle-container">
+                    <label class="toggle">
+                        <input type="checkbox" id="wakeWordToggle" disabled>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Wake Word Detection (Disabled)</span>
+                    </label>
+                </div>
+                <div class="toggle-container">
+                    <label class="toggle">
+                        <input type="checkbox" id="speechToggle" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Speech Output</span>
+                    </label>
+                </div>
+                <div class="toggle-container" id="openaiVoiceSelectorContainer" style="display: none;">
+                    <label for="openaiVoiceSelect" class="toggle-label" style="margin-right: 10px;">OpenAI Voice:</label>
+                    <select id="openaiVoiceSelect" class="voice-select">
+                        <option value="alloy">Alloy</option>
+                        <option value="echo">Echo</option>
+                        <option value="fable">Fable</option>
+                        <option value="onyx">Onyx</option>
+                        <option value="nova" selected>Nova</option>
+                        <option value="shimmer">Shimmer</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <div class="microphone-selector">
+            <h3>Select Microphone</h3>
+            <div id="mic-init-prompt">
+                <p>Microphone access required to use voice input.</p>
+                <button id="enableMicButton">Enable Microphone</button>
+                <p id="mic-status" class="mic-status-message"></p> 
+            </div>
+            <div class="radio-group" id="microphones" style="display: none;"></div>
+        </div>
+
+        <main>
+            <div class="chat-container">
+                <div id="conversation"></div>
+                <div class="input-area">
+                    <textarea id="userInput" placeholder="Type your message..."></textarea>
+                    <button id="sendButton"><i class="fas fa-paper-plane"></i></button>
+                    <button id="micButton"><i class="fas fa-microphone"></i></button>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="debug-log">
+                    <h3>Debug Log</h3>
+                    <div id="debugLog"></div>
+                </div>
+            </div>
+        </main>
+
+        <div id="visualizer-container">
+            <canvas id="audioVisualizer"></canvas>
+        </div>
+
+        <footer>
+            <p>made by wizard1</p>
+        </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="/static/js/recorder.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html> 

@@ -14,16 +14,84 @@ import subprocess # For subprocess-based TTS as fallback
 import multiprocessing  # For process-based TTS
 from vosk import Model, KaldiRecognizer  # For wake word detection
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
-from pydub import AudioSegment
+# Using ffmpeg directly instead of pydub (which requires pyaudioop)
+# from pydub import AudioSegment
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import asyncio
 import requests
 
+# Check for ffmpeg availability (used for audio conversion instead of pydub)
+FFMPEG_AVAILABLE = False
+try:
+    result = subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if result.returncode == 0:
+        FFMPEG_AVAILABLE = True
+        print("FFmpeg is available for audio conversion")
+    else:
+        print("FFmpeg command exists but returned an error. Audio conversion may be limited.")
+except FileNotFoundError:
+    print("FFmpeg not found. You'll need to install FFmpeg for audio processing.")
+    print("Download from: https://ffmpeg.org/download.html")
+except Exception as e:
+    print(f"Error checking for FFmpeg: {e}")
+
+# Audio conversion function to replace pydub functionality
+def convert_audio(input_path, output_path, sample_rate=16000, channels=1):
+    """Convert audio using ffmpeg instead of pydub"""
+    if not FFMPEG_AVAILABLE:
+        print("WARNING: FFmpeg not available, audio conversion will fail")
+        return False
+        
+    try:
+        # Use ffmpeg to convert audio
+        cmd = [
+            "ffmpeg", "-y", 
+            "-i", input_path,
+            "-ar", str(sample_rate),
+            "-ac", str(channels),
+            "-acodec", "pcm_s16le",
+            output_path
+        ]
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+        return os.path.exists(output_path)
+    except Exception as e:
+        print(f"Audio conversion error: {e}")
+        return False
+
+# Generate silent audio with ffmpeg instead of pydub
+def generate_silence(output_path, duration_ms=500, sample_rate=16000, channels=1):
+    """Create a silent WAV file using ffmpeg"""
+    if not FFMPEG_AVAILABLE:
+        print("WARNING: FFmpeg not available, silent audio generation will fail")
+        return False
+        
+    duration_sec = duration_ms / 1000.0
+    
+    try:
+        # Use ffmpeg to generate silence
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r={sample_rate}:cl=mono",
+            "-t", str(duration_sec),
+            "-ar", str(sample_rate),
+            "-ac", str(channels),
+            "-acodec", "pcm_s16le",
+            output_path
+        ]
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+        return os.path.exists(output_path)
+    except Exception as e:
+        print(f"Silent audio generation error: {e}")
+        return False
+
 # Load environment variables
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "local").lower()
 
 # Initialize OpenAI client if using OpenAI
 openai_client = None
@@ -91,8 +159,8 @@ vosk_model = None
 vosk_available = False
 
 # Add near the top with other OpenAI setup
-TTS_MODEL = "tts-1"  # OpenAI's TTS model
-TTS_VOICE = "nova"   # OpenAI's voice option
+# TTS_MODEL = "tts-1"  # OpenAI's TTS model -- No longer needed, will be hardcoded
+TTS_VOICE = "nova"   # OpenAI's voice option for CLI
 
 # Function for process-based TTS
 def speak_in_process(text, rate=TTS_RATE, volume=TTS_VOLUME):
@@ -202,7 +270,7 @@ def tts_speak(text):
         return
     
     # Visual indicator that VORTEX is speaking
-    print(f"{COLOR_GREEN}[🔊 VORTEX Speaking...]{COLOR_RESET}")
+    print(f"{COLOR_GREEN}[�� VORTEX Speaking...]{COLOR_RESET}")
     
     # If using OpenAI, handle TTS differently
     if AI_PROVIDER == "openai" and openai_client:
@@ -231,8 +299,8 @@ def tts_speak(text):
             
             # Request body
             data = {
-                "model": TTS_MODEL,
-                "voice": TTS_VOICE,
+                "model": "tts-1", # Hardcoded to tts-1 for speed
+                "voice": TTS_VOICE, # Uses the hardcoded TTS_VOICE for CLI
                 "input": text
             }
             
@@ -521,29 +589,52 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
 # Audio Playback
 # ------------------------------
 def play_audio(mp3_path):
-	"""Plays audio file."""
-	try:
-		audio = AudioSegment.from_mp3(mp3_path)
-		wav_data = io.BytesIO()
-		audio.export(wav_data, format="wav")  # Convert to WAV
-
-		wav_data.seek(0)
-		sound = AudioSegment.from_wav(wav_data)
-		samples = np.array(sound.get_array_of_samples(), dtype=np.int16)
-
-		if get_debug_mode():
-			print(f"[🔊 Playing {len(samples)} samples...]")
-
-		# Play audio smoothly
-		sd.play(samples, samplerate=sound.frame_rate)
-		sd.wait()
-
-		if get_debug_mode():
-			print("[✅ Playback Completed]")
-
-	except Exception as e:
-		if get_debug_mode():
-			print(f"[❌ ERROR in Playback] {e}")
+    """Play an MP3 file, first converting it to WAV using ffmpeg if needed."""
+    if not os.path.exists(mp3_path):
+        print(f"Audio file not found: {mp3_path}")
+        return False
+        
+    try:
+        # If it's an MP3, convert to WAV first using ffmpeg
+        if mp3_path.lower().endswith('.mp3'):
+            wav_path = mp3_path.replace('.mp3', '.wav')
+            if not convert_audio(mp3_path, wav_path):
+                print(f"Failed to convert MP3 to WAV: {mp3_path}")
+                return False
+        else:
+            wav_path = mp3_path
+            
+        # Play the WAV file directly using PyAudio
+        with wave.open(wav_path, 'rb') as wf:
+            p = pyaudio.PyAudio()
+            stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                           channels=wf.getnchannels(),
+                           rate=wf.getframerate(),
+                           output=True)
+            
+            # Read data in chunks
+            chunk_size = 1024
+            data = wf.readframes(chunk_size)
+            
+            # Play audio
+            while len(data) > 0:
+                stream.write(data)
+                data = wf.readframes(chunk_size)
+                
+            # Clean up
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            
+            # Delete temporary WAV file if we converted from MP3
+            if mp3_path.lower().endswith('.mp3') and os.path.exists(wav_path):
+                os.remove(wav_path)
+                
+            return True
+                
+    except Exception as e:
+        print(f"Error playing audio: {e}")
+        return False
 
 def list_audio_devices():
     """Lists all available audio devices and shows which one is currently the default."""

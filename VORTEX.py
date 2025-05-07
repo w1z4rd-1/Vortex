@@ -9,12 +9,18 @@ print("Initializing VORTEX...")
 
 # Configuration - must be set before any imports
 USE_OPTIONAL_EXTRAS = False  # Set to False to disable optional extras
+USE_WEB_INTERFACE = True     # Set to False to disable web interface
+WEB_INTERFACE_PORT = 25566   # Port for web interface
 
 # Set as environment variable for child processes
 os.environ['USE_OPTIONAL_EXTRAS'] = 'true' if USE_OPTIONAL_EXTRAS else 'false'
+os.environ['VORTEX_WEB_PORT'] = str(WEB_INTERFACE_PORT)
 
 # Add a simple flag to prevent re-initialization
 _VORTEX_INITIALIZED = False
+
+# Global for web interface thread
+web_thread = None
 
 # Check if we've already gone through initialization
 if _VORTEX_INITIALIZED:
@@ -118,99 +124,104 @@ async def main():
                     await asyncio.sleep(0.3)
             # --- End of VORTEX.PY CHANGE ---
             
-            print("[Waiting for wake word...]")
+            # --- VORTEX.PY CHANGE: Wake word detection disabled --- 
+            # print("[Waiting for wake word...]")
             
-            try:
-                # Consider adding a timeout or making detect_wake_word async if it blocks indefinitely
-                wake_word_detected = detect_wake_word(ignore_if_speaking=True) # Use the new parameter to ignore wake words when TTS is active
+            # try:
+            #     # Consider adding a timeout or making detect_wake_word async if it blocks indefinitely
+            #     wake_word_detected = detect_wake_word(ignore_if_speaking=True) # Use the new parameter to ignore wake words when TTS is active
 
-                if wake_word_detected:
-                    print("[Wake word detected! Listening for command...]")
+            #     if wake_word_detected:
+            #         print("[Wake word detected! Listening for command...]")
                     
-                    try:
-                        if get_debug_mode(): print("[DEBUG] Starting audio recording...")
-                        # Visual indicator that VORTEX is actively listening
-                        print(f"{COLOR_BLUE}[🎤 VORTEX Listening...]{COLOR_RESET}")
-                        audio_file = record_audio()
-                        print(f"{COLOR_BLUE}[✓ VORTEX Done Listening]{COLOR_RESET}")
-                        if not audio_file or not os.path.exists(audio_file):
-                            print(f"{COLOR_YELLOW}[AUDIO] No audio recorded or file not found.{COLOR_RESET}")
-                            continue
+            #         try:
+            #             if get_debug_mode(): print("[DEBUG] Starting audio recording...")
+            #             # Visual indicator that VORTEX is actively listening
+            #             print(f"{COLOR_BLUE}[🎤 VORTEX Listening...]{COLOR_RESET}")
+            #             audio_file = record_audio()
+            #             print(f"{COLOR_BLUE}[✓ VORTEX Done Listening]{COLOR_RESET}")
+            #             if not audio_file or not os.path.exists(audio_file):
+            #                 print(f"{COLOR_YELLOW}[AUDIO] No audio recorded or file not found.{COLOR_RESET}")
+            #                 continue
 
-                        if get_debug_mode(): print(f"[DEBUG] Audio file created: {audio_file}")
+            #             if get_debug_mode(): print(f"[DEBUG] Audio file created: {audio_file}")
 
-                        # Use Vosk/Whisper to transcribe the recorded audio
-                        transcription = await transcribe_audio(audio_file)
+            #             # Use Vosk/Whisper to transcribe the recorded audio
+            #             transcription = await transcribe_audio(audio_file)
 
-                        if transcription and transcription != "I didn't catch that":
-                            user_input = transcription.strip()
-                            if get_debug_mode(): print(f"[DEBUG] Transcription successful: '{user_input}'")
-                        else:
-                            print(f"{COLOR_YELLOW}[TRANSCRIPTION] Could not understand audio or transcription empty.{COLOR_RESET}")
-                            await speak_text("Sorry, I didn't catch that.")
-                            user_input = None
+            #             if transcription and transcription != "I didn't catch that":
+            #                 user_input = transcription.strip()
+            #                 if get_debug_mode(): print(f"[DEBUG] Transcription successful: '{user_input}'")
+            #             else:
+            #                 print(f"{COLOR_YELLOW}[TRANSCRIPTION] Could not understand audio or transcription empty.{COLOR_RESET}")
+            #                 await speak_text("Sorry, I didn't catch that.")
+            #                 user_input = None
 
-                        if user_input:
-                            print(f"{COLOR_BLUE}[User] {user_input}{COLOR_RESET}")
+            #             if user_input:
+            #                 print(f"{COLOR_BLUE}[User] {user_input}{COLOR_RESET}")
 
-                            # --- Command Processing ---
-                            lower_input = user_input.lower()
+            #                 # --- Command Processing ---
+            #                 lower_input = user_input.lower()
 
-                            # Check for exit command
-                            if lower_input in ['exit vortex', 'quit vortex', 'shutdown vortex', 'goodbye vortex']:
-                                shutdown_message = "Shutting down VORTEX. Goodbye!"
-                                print(f"{COLOR_YELLOW}{shutdown_message}{COLOR_RESET}")
-                                # Important system message - wait for completion
-                                await speak_text(shutdown_message, wait_for_completion=True)
-                                # Potentially add cleanup tasks here
-                                return # Exit the main loop (and thus the thread)
+            #                 # Check for exit command
+            #                 if lower_input in ['exit vortex', 'quit vortex', 'shutdown vortex', 'goodbye vortex']:
+            #                     shutdown_message = "Shutting down VORTEX. Goodbye!"
+            #                     print(f"{COLOR_YELLOW}{shutdown_message}{COLOR_RESET}")
+            #                     # Important system message - wait for completion
+            #                     await speak_text(shutdown_message, wait_for_completion=True)
+            #                     # Potentially add cleanup tasks here
+            #                     return # Exit the main loop (and thus the thread)
 
-                            # Check for list devices command
-                            if lower_input in ["list devices", "list audio devices", "show devices", "show microphones", "audio devices"]:
-                                print("[INFO] Listing audio devices...")
-                                list_audio_devices() # Assuming this prints to console
-                                await speak_text("I've listed the available audio devices in the console.")
-                                continue # Go back to waiting for wake word
+            #                 # Check for list devices command
+            #                 if lower_input in ["list devices", "list audio devices", "show devices", "show microphones", "audio devices"]:
+            #                     print("[INFO] Listing audio devices...")
+            #                     list_audio_devices() # Assuming this prints to console
+            #                     await speak_text("I've listed the available audio devices in the console.")
+            #                     continue # Go back to waiting for wake word
 
-                            # --- Process normal command through AI ---
-                            print("[AI Processing...]")
-                            ai_response = await process_input(user_input)
+            #                 # --- Process normal command through AI ---
+            #                 print("[AI Processing...]")
+            #                 ai_response = await process_input(user_input)
 
-                            if ai_response:
-                                # Speak the AI's response
-                                await speak_text(ai_response)
-                            else:
-                                # Handle cases where process_input returned None or an error message already printed
-                                if get_debug_mode(): print("[DEBUG] AI processing returned no speakable response.")
-                                await speak_text("I encountered an issue processing that request.")
+            #                 if ai_response:
+            #                     # Speak the AI's response
+            #                     await speak_text(ai_response)
+            #                 else:
+            #                     # Handle cases where process_input returned None or an error message already printed
+            #                     if get_debug_mode(): print("[DEBUG] AI processing returned no speakable response.")
+            #                     await speak_text("I encountered an issue processing that request.")
 
-                        # else: No user input after wake word -> loop back
+            #             # else: No user input after wake word -> loop back
 
-                    except Exception as e:
-                        print(f"{COLOR_RED}[ERROR] Audio recording, transcription, or command processing failed: {e}{COLOR_RESET}")
-                        import traceback
-                        if get_debug_mode(): traceback.print_exc()
-                        await speak_text("Sorry, I ran into an error while handling your command.")
-                        # Avoid immediate retry loops for persistent errors
-                        await asyncio.sleep(1)
+            #         except Exception as e:
+            #             print(f"{COLOR_RED}[ERROR] Audio recording, transcription, or command processing failed: {e}{COLOR_RESET}")
+            #             import traceback
+            #             if get_debug_mode(): traceback.print_exc()
+            #             await speak_text("Sorry, I ran into an error while handling your command.")
+            #             # Avoid immediate retry loops for persistent errors
+            #             await asyncio.sleep(1)
 
-                else:
-                    # Allow checking for wake word periodically if detect_wake_word has a timeout
-                    # If detect_wake_word is fully blocking, this part might not be reached often
-                    # Consider adding a very short sleep if detect_wake_word returns False immediately
-                    # await asyncio.sleep(0.1) # Short pause if wake word detection isn't blocking
-                    pass # If detect_wake_word is blocking, loop continues naturally
+            #     else:
+            #         # Allow checking for wake word periodically if detect_wake_word has a timeout
+            #         # If detect_wake_word is fully blocking, this part might not be reached often
+            #         # Consider adding a very short sleep if detect_wake_word returns False immediately
+            #         # await asyncio.sleep(0.1) # Short pause if wake word detection isn't blocking
+            #         pass # If detect_wake_word is blocking, loop continues naturally
 
-            except Exception as e:
-                # This catches errors specifically in the wake word detection phase
-                print(f"{COLOR_RED}[ERROR] Wake word detection failed: {e}{COLOR_RESET}")
-                if get_debug_mode():
-                    import traceback
-                    traceback.print_exc()
-                    print(f"{COLOR_RED}[DEBUG] Continuing wake word detection loop...{COLOR_RESET}")
-                # Don't restart VORTEX, just wait a bit and continue the loop
-                await asyncio.sleep(2) # Longer sleep after wake word error
-                continue
+            # except Exception as e:
+            #     # This catches errors specifically in the wake word detection phase
+            #     print(f"{COLOR_RED}[ERROR] Wake word detection failed: {e}{COLOR_RESET}")
+            #     if get_debug_mode():
+            #         import traceback
+            #         traceback.print_exc()
+            #         print(f"{COLOR_RED}[DEBUG] Continuing wake word detection loop...{COLOR_RESET}")
+            #     # Don't restart VORTEX, just wait a bit and continue the loop
+            #     await asyncio.sleep(2) # Longer sleep after wake word error
+            #     continue
+            # --- End of VORTEX.PY CHANGE: Wake word detection disabled --- 
+
+            # Keep the loop alive but prevent it from spinning too fast
+            await asyncio.sleep(1) 
 
         except KeyboardInterrupt:
             print(f"\n{COLOR_YELLOW}[KeyboardInterrupt] Exiting VORTEX.{COLOR_RESET}")
@@ -225,6 +236,43 @@ async def main():
             print(f"{COLOR_YELLOW}[INFO] Attempting to continue...{COLOR_RESET}")
             await asyncio.sleep(5) # Wait significantly longer after a major loop error
 
+def start_web_interface():
+    """Start the VORTEX web interface in a separate thread"""
+    global web_thread
+    
+    if not USE_WEB_INTERFACE:
+        print(f"{COLOR_YELLOW}[INFO] Web interface disabled in configuration.{COLOR_RESET}")
+        return
+    
+    try:
+        from src.remote.app import app, socketio
+        
+        def run_web_server():
+            print(f"{COLOR_GREEN}[INFO] Starting VORTEX Web Interface on port {WEB_INTERFACE_PORT}{COLOR_RESET}")
+            print(f"{COLOR_GREEN}[INFO] Web interface available at http://127.0.0.1:{WEB_INTERFACE_PORT}{COLOR_RESET}")
+            socketio.run(app, host='0.0.0.0', port=WEB_INTERFACE_PORT, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)
+        
+        web_thread = threading.Thread(target=run_web_server, name="VortexWebThread", daemon=True)
+        web_thread.start()
+        
+    except ImportError as e:
+        print(f"{COLOR_YELLOW}[WARN] Could not start web interface: {e}{COLOR_RESET}")
+        print(f"{COLOR_YELLOW}[WARN] Make sure you have installed the required dependencies: flask flask-socketio flask-cors{COLOR_RESET}")
+    except Exception as e:
+        print(f"{COLOR_RED}[ERROR] Failed to start web interface: {e}{COLOR_RESET}")
+        if get_debug_mode():
+            import traceback
+            traceback.print_exc()
+
+def stop_web_interface():
+    """Stop the VORTEX web interface"""
+    global web_thread
+    
+    if web_thread and web_thread.is_alive():
+        print(f"{COLOR_YELLOW}[INFO] Stopping VORTEX Web Interface...{COLOR_RESET}")
+        # The thread is daemon, so it will be terminated when the main program exits
+        # But we can do cleanup here if needed in the future
+
 # --- Main Execution Block ---
 if __name__ == "__main__":
     # Optional: Clear console on startup (consider platform compatibility)
@@ -238,6 +286,8 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[ERROR] Failed to display startup message: {e}")
 
+    # Start web interface
+    start_web_interface()
 
     # Show wake word detection message
     # TODO: Potentially get wake word from config/voice module?
@@ -332,4 +382,7 @@ if __name__ == "__main__":
         print(f"{COLOR_RED}[ERROR] AI thread did not terminate gracefully.{COLOR_RESET}")
         # Consider os._exit(1) here if forceful exit is required
 
+    # Stop web interface before exiting
+    stop_web_interface()
+    
     print(f"{COLOR_GREEN}[INFO] VORTEX shut down complete.{COLOR_RESET}")

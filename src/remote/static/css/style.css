@@ -1,0 +1,573 @@
+/* VORTEX Web Interface Styles - Cyberpunk Dark Mode */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-primary: #0d0d0d;      /* Very dark background */
+    --bg-secondary: #1a1a1a;    /* Slightly lighter background for elements */
+    --bg-accent: #2a2a2a;       /* Background for interactive elements */
+    --text-primary: #e0e0e0;   /* Light gray for main text */
+    --text-secondary: #a0a0a0; /* Dimmer text */
+    --accent-cyan: #00ffff;      /* Neon cyan accent */
+    --accent-magenta: #ff00ff;    /* Neon magenta accent */
+    --accent-lime: #7fff00;       /* Neon lime accent */
+    --error-color: #ff4136;     /* Red for errors */
+    --success-color: var(--accent-cyan); /* Use cyan for success */
+    --shadow-light: 0 0 8px rgba(0, 255, 255, 0.3);
+    --shadow-medium: 0 0 15px rgba(0, 255, 255, 0.5);
+    --border-color: #444;
+    --font-primary: 'Orbitron', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-secondary: 'Roboto Mono', monospace;
+}
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap');
+
+body {
+    font-family: var(--font-secondary);
+    line-height: 1.6;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Header Styles */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 0;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--accent-cyan);
+    box-shadow: var(--shadow-light);
+}
+
+.logo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.logo h1 {
+    font-family: var(--font-primary);
+    font-size: 3rem;
+    color: var(--accent-cyan);
+    margin: 0;
+    text-shadow: 0 0 5px var(--accent-cyan);
+    font-weight: 700;
+}
+
+.logo h2 {
+    font-family: var(--font-secondary);
+    font-size: 1rem;
+    color: var(--text-secondary);
+    font-weight: normal;
+    margin-top: -8px;
+    letter-spacing: 1px;
+}
+
+.controls {
+    display: flex;
+    gap: 25px;
+    flex-wrap: wrap;
+}
+
+/* Toggle Switch */
+.toggle-container {
+    display: flex;
+    align-items: center;
+}
+
+.toggle {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    background-color: var(--bg-accent);
+    border: 1px solid var(--border-color);
+    border-radius: 3px; /* Sharper edge */
+    transition: .4s;
+    margin-right: 10px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 2px;
+    background-color: var(--text-secondary);
+    border-radius: 1px; /* Sharper edge */
+    transition: .4s;
+}
+
+input:checked + .toggle-slider {
+    background-color: var(--accent-cyan);
+    box-shadow: var(--shadow-light);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(26px);
+    background-color: var(--bg-primary);
+}
+
+input:disabled + .toggle-slider {
+    background-color: #333;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+input:disabled + .toggle-slider:before {
+    background-color: #555;
+}
+
+.toggle-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-family: var(--font-secondary);
+}
+
+input:checked ~ .toggle-label {
+    color: var(--accent-cyan);
+}
+
+input:disabled ~ .toggle-label {
+    color: #666;
+}
+
+/* Microphone Selector */
+.microphone-selector {
+    background-color: var(--bg-secondary);
+    padding: 20px;
+    margin-bottom: 25px;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.microphone-selector h3 {
+    color: var(--accent-magenta);
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    font-family: var(--font-primary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#mic-init-prompt p {
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+}
+
+#enableMicButton {
+    padding: 10px 20px;
+    font-size: 1rem;
+    background-color: var(--accent-cyan);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: var(--font-secondary);
+    margin-bottom: 10px;
+}
+
+#enableMicButton:hover {
+    box-shadow: var(--shadow-medium);
+    filter: brightness(1.2);
+}
+
+#enableMicButton:disabled {
+    background-color: var(--bg-accent);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: none;
+}
+
+.mic-status-message {
+    font-size: 0.9em;
+    color: var(--accent-lime);
+    min-height: 1.2em; /* Reserve space */
+}
+
+.radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px 15px;
+    background-color: var(--bg-accent);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    transition: all 0.3s;
+    color: var(--text-secondary);
+}
+
+.radio-label:hover {
+    background-color: var(--accent-cyan);
+    color: var(--bg-primary);
+    border-color: var(--accent-cyan);
+    box-shadow: var(--shadow-light);
+}
+
+.radio-label input {
+    margin-right: 10px;
+    accent-color: var(--accent-magenta);
+}
+
+input[type="radio"]:checked + span {
+    color: var(--accent-magenta);
+    font-weight: bold;
+}
+
+/* Main Content Area */
+main {
+    display: flex;
+    flex: 1;
+    gap: 25px;
+}
+
+.chat-container {
+    flex: 7;
+    background-color: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+#conversation {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 60vh;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-cyan) var(--bg-accent);
+}
+
+#conversation::-webkit-scrollbar {
+    width: 8px;
+}
+#conversation::-webkit-scrollbar-track {
+    background: var(--bg-accent);
+}
+#conversation::-webkit-scrollbar-thumb {
+    background-color: var(--accent-cyan);
+    border-radius: 0;
+    border: 1px solid var(--bg-accent);
+}
+
+.message {
+    margin-bottom: 15px;
+    padding: 12px 18px;
+    max-width: 85%;
+    word-wrap: break-word;
+    border: 1px solid var(--border-color);
+    position: relative;
+    line-height: 1.5;
+}
+
+.user-message {
+    background-color: rgba(0, 255, 255, 0.1); /* Cyan tint */
+    color: var(--text-primary);
+    align-self: flex-end;
+    margin-left: auto;
+    border-left: 3px solid var(--accent-cyan);
+    border-radius: 3px 0 0 3px;
+}
+
+.assistant-message {
+    background-color: rgba(255, 0, 255, 0.1); /* Magenta tint */
+    color: var(--text-primary);
+    align-self: flex-start;
+    border-right: 3px solid var(--accent-magenta);
+    border-radius: 0 3px 3px 0;
+}
+
+.system-message {
+    background-color: rgba(127, 255, 0, 0.1); /* Lime tint */
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.9em;
+    align-self: center;
+    width: 90%;
+    text-align: center;
+    border: 1px dashed var(--accent-lime);
+    border-radius: 3px;
+}
+
+.message-timestamp {
+    font-size: 0.75em;
+    color: var(--text-secondary);
+    position: absolute;
+    bottom: 3px;
+    right: 8px;
+    opacity: 0.6;
+}
+
+.user-message .message-timestamp {
+    right: auto;
+    left: 8px;
+}
+
+.input-area {
+    display: flex;
+    padding: 15px;
+    background-color: var(--bg-primary);
+    border-top: 1px solid var(--accent-cyan);
+}
+
+#userInput {
+    flex: 1;
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-accent);
+    color: var(--text-primary);
+    border-radius: 3px;
+    resize: none;
+    height: 48px;
+    outline: none;
+    font-family: var(--font-secondary);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+#userInput:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: var(--shadow-light);
+}
+
+#sendButton, #micButton {
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-accent);
+    color: var(--accent-cyan);
+    border-radius: 3px;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+#sendButton:hover, #micButton:hover {
+    background-color: var(--accent-cyan);
+    color: var(--bg-primary);
+    border-color: var(--accent-cyan);
+    box-shadow: var(--shadow-medium);
+}
+
+#micButton.recording {
+    background-color: var(--accent-magenta);
+    color: var(--bg-primary);
+    border-color: var(--accent-magenta);
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+}
+
+/* Sidebar */
+.sidebar {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.debug-log {
+    background-color: var(--bg-secondary);
+    border-radius: 0;
+    padding: 15px;
+    flex: 1;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.debug-log h3 {
+    color: var(--accent-lime);
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    font-family: var(--font-primary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#debugLog {
+    overflow-y: auto;
+    max-height: 60vh;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    padding: 10px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-lime) var(--bg-accent);
+}
+
+#debugLog::-webkit-scrollbar {
+    width: 8px;
+}
+#debugLog::-webkit-scrollbar-track {
+    background: var(--bg-accent);
+}
+#debugLog::-webkit-scrollbar-thumb {
+    background-color: var(--accent-lime);
+    border-radius: 0;
+    border: 1px solid var(--bg-accent);
+}
+
+.log-info {
+    color: var(--text-secondary);
+}
+
+.log-error {
+    color: var(--error-color);
+    font-weight: bold;
+}
+
+/* Audio Visualizer */
+#visualizer-container {
+    width: 100%;
+    height: 100px;
+    margin: 25px 0;
+    background-color: var(--bg-secondary);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+#audioVisualizer {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Footer */
+footer {
+    margin-top: 25px;
+    text-align: center;
+    padding: 15px 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Responsive Design */
+@media (max-width: 900px) {
+    main {
+        flex-direction: column;
+    }
+    
+    .chat-container, .sidebar {
+        width: 100%;
+    }
+    
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .controls {
+        margin-top: 15px;
+        width: 100%;
+        justify-content: space-around;
+    }
+}
+
+@media (max-width: 600px) {
+    html {
+        font-size: 15px; /* Slightly smaller base font for small screens */
+    }
+
+    .container {
+        padding: 10px;
+    }
+    
+    #conversation {
+        max-height: 50vh; /* Allow slightly more chat height */
+        padding: 10px;
+    }
+    
+    .message {
+        max-width: 95%;
+        padding: 10px 12px;
+    }
+
+    .logo h1 {
+        font-size: 2.2rem; /* Adjust logo size */
+    }
+
+    .input-area {
+        padding: 10px;
+    }
+
+    #userInput {
+        height: 44px;
+        padding: 10px 12px;
+    }
+
+    /* Make buttons slightly larger tap targets */
+    #sendButton, #micButton, #enableMicButton {
+        min-width: 48px; 
+        min-height: 48px; 
+        padding: 10px; /* Ensure padding doesn't shrink them */
+    }
+    
+    #sendButton, #micButton {
+        width: 48px;
+        height: 48px;
+        font-size: 1.2rem; /* Slightly larger icon */
+    }
+    
+    #enableMicButton {
+        font-size: 0.9rem; /* Adjust text size */
+        width: 100%; /* Make enable button full width */
+        margin-bottom: 15px;
+    }
+
+    .toggle-label {
+        font-size: 0.8rem;
+    }
+    
+    /* Improve radio button tap targets */
+    .radio-label {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+} 
