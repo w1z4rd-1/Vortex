@@ -335,7 +335,19 @@ if __name__ == "__main__":
             # Run until main() completes OR shutdown_event is set
             main_task = loop.create_task(main())
             monitor_task = loop.create_task(monitor_shutdown(shutdown_event, main_task))
-            loop.run_until_complete(asyncio.gather(main_task, monitor_task))
+            
+            try:
+                loop.run_until_complete(asyncio.gather(main_task, monitor_task))
+            finally:
+                # Ensure cleanup happens even if there's an error
+                try:
+                    from src.Boring.boring import cleanup_ai_client
+                    loop.run_until_complete(cleanup_ai_client())
+                except Exception as cleanup_e:
+                    print(f"{COLOR_RED}[WARN] Error during AI client cleanup: {cleanup_e}{COLOR_RESET}")
+                finally:
+                    loop.close()
+                    
         except KeyboardInterrupt:
             print("\n[INFO] KeyboardInterrupt caught in thread. Signaling shutdown...")
             shutdown_event.set()
@@ -346,22 +358,6 @@ if __name__ == "__main__":
                  traceback.print_exc()
                  log_debug_event(f"Traceback printed for critical error in async loop runner: {e}", is_error=True)
              shutdown_event.set() # Signal shutdown on unexpected error too
-        finally:
-            if loop and loop.is_running():
-                print("[INFO] Closing async loop...")
-                # Cancel remaining tasks gracefully
-                for task in asyncio.all_tasks(loop):
-                    if not task.done():
-                        task.cancel()
-                try:
-                    # Give tasks a moment to cancel
-                    loop.run_until_complete(asyncio.sleep(0.5))
-                except asyncio.CancelledError:
-                    pass # Expected if loop is stopping
-                loop.close()
-                print("[INFO] Async loop closed.")
-            # Ensure the main program exits if the thread stops
-            # os._exit(1) # Force exit if needed, but try graceful first
 
     async def monitor_shutdown(event, task_to_monitor):
         """Coroutine to wait for shutdown signal and cancel the main task."""

@@ -60,7 +60,11 @@ def initialize_ai_client_for_loop():
             if OLLAMA_SERVER:
                 ollama_options['host'] = OLLAMA_SERVER
             
-            ai_client = ollama.AsyncClient(**ollama_options)
+            # Create client with explicit timeout
+            ai_client = ollama.AsyncClient(
+                **ollama_options,
+                timeout=60.0  # 60 second timeout
+            )
             # Sync check for connectivity (this is fine here as it's part of init)
             try:
                 sync_client = ollama.Client(**ollama_options) # For sync check only
@@ -85,6 +89,20 @@ def initialize_ai_client_for_loop():
         log_debug_event(f"AI client remained None after initialization attempt for {AI_PROVIDER}", is_error=True)
         raise RuntimeError(f"AI Client could not be initialized for provider: {AI_PROVIDER}")
     log_debug_event("AI client initialization complete.")
+
+async def cleanup_ai_client():
+    """Cleanup function to properly close AI client connections."""
+    global ai_client
+    if ai_client is not None:
+        try:
+            if AI_PROVIDER == "ollama":
+                # Close all connections in the Ollama client's connection pool
+                await ai_client.aclose()
+            log_debug_event("AI client cleanup completed successfully.")
+        except Exception as e:
+            log_debug_event(f"Error during AI client cleanup: {e}", is_error=True)
+        finally:
+            ai_client = None
 
 # ------------------------------
 # ANSI Escape Codes for Colors
@@ -330,7 +348,6 @@ async def call_ai_provider():
                      for i, msg in enumerate(conversation_history):
                          content_preview = str(msg.get("content", ""))[:50].replace("\n", "\\n") 
                          print(f"  [{i}] {msg.get('role')}: {content_preview}...")
-
 
             # --- Tool Call Processing ---
             if assistant_tool_calls:
