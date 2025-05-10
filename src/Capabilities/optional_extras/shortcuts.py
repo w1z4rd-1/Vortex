@@ -7,6 +7,7 @@ from ctypes import wintypes
 import glob
 import subprocess
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 
 def clarify_and_launch(clarified_name: str):
 	"""
@@ -37,8 +38,7 @@ def launch_shortcut(program_name: str):
 	"""
 	try:
 		# Launch the program
-		if get_debug_mode():
-			print(f"[🚀 LAUNCHING] {program_name}")
+		log_debug_event(f"LAUNCHING: {program_name}")
 		
 		subprocess.Popen(program_name, shell=True)
 		return f"✅ Launched: {os.path.basename(program_name)}"

@@ -14,6 +14,7 @@ import openpyxl
 import xlsxwriter
 import src.Boring.capabilities as capabilities
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 
 # Define directories
 TEMP_DIR = "temp"
@@ -32,22 +33,14 @@ client = openai.OpenAI()
 
 def clear_temp_folder():
 	"""Deletes everything in the temp folder to start fresh."""
-	if get_debug_mode():
-		print(f"[DEBUG] Clearing temp folder: {TEMP_DIR}")
+	log_debug_event(f"Clearing temp folder: {TEMP_DIR}")
 
 	for folder in [TEMP_DIR, DATA_ANALYSIS_DIR, OUTPUT_DIR, LOG_DIR]:
 		if os.path.exists(folder):
 			shutil.rmtree(folder)
-			if get_debug_mode():
-				print(f"[DEBUG] Deleted folder: {folder}")
+			log_debug_event(f"Deleted folder: {folder}")
 		os.makedirs(folder)
-		if get_debug_mode():
-			print(f"[DEBUG] Recreated empty folder: {folder}")
-
-def log_message(message):
-	"""Logs messages to console if debug mode is enabled."""
-	if get_debug_mode():
-		print(f"[DEBUG] {message}")
+		log_debug_event(f"Recreated empty folder: {folder}")
 
 def log_error(error_message):
 	"""Logs errors to a file in UTF-8 encoding."""
@@ -55,13 +48,13 @@ def log_error(error_message):
 	with open(log_file_path, "a", encoding="utf-8") as log_file:
 		log_file.write(f"{datetime.datetime.now()} - {error_message}\n")
 		log_file.write(traceback.format_exc() + "\n")
-	log_message(f"❌ Logged error: {error_message}")
+	log_debug_event(f"Logged error to file: {error_message}", is_error=True)
 
 def extract_sample_data(file_path):
 	"""Reads the first 10 rows of the spreadsheet to provide AI with context."""
 	file_extension = os.path.splitext(file_path)[-1].lower()
 
-	log_message(f"📂 Extracting sample data from file: {file_path}")
+	log_debug_event(f"Extracting sample data from file: {file_path}")
 
 	try:
 		if file_extension == ".csv":
@@ -72,7 +65,7 @@ def extract_sample_data(file_path):
 			log_error(f"❌ Unsupported file format: {file_extension}")
 			return None
 
-		log_message(f"✅ Successfully extracted first 10 rows from {file_path}")
+		log_debug_event(f"Successfully extracted first 10 rows from {file_path}")
 		return df.head(10).to_json(orient="records")
 	except Exception as e:
 		log_error(f"❌ Failed to extract sample data: {e}")
@@ -83,7 +76,7 @@ def validate_python_code(code):
 	syntax_error = None
 	warnings_list = []
 
-	log_message(f"🛠️ Validating AI-generated Python code...")
+	log_debug_event(f"Validating AI-generated Python code...")
 
 	try:
 		ast.parse(code)
@@ -101,9 +94,9 @@ def validate_python_code(code):
 			warnings_list.append(str(warning.message))
 
 	if syntax_error:
-		log_message(f"⚠️ Detected Syntax Error: {syntax_error}")
+		log_debug_event(f"Detected Syntax Error in AI code: {syntax_error}", is_error=True)
 	if warnings_list:
-		log_message(f"⚠️ Detected Warnings: {warnings_list}")
+		log_debug_event(f"Detected Warnings in AI code: {warnings_list}", is_error=True)
 
 	return syntax_error, warnings_list
 
@@ -123,7 +116,7 @@ def execute_ai_code(ai_code):
 		}
 		
 		exec(ai_code, exec_globals)
-		log_message("✅ Successfully executed AI-generated code")
+		log_debug_event("Successfully executed AI-generated code")
 		return True
 	except (TypeError, ValueError) as e:
 		log_error(f"❌ Type Error in AI-generated code: {e}")
@@ -142,7 +135,7 @@ def generate_ai_code(file_path, instructions):
 		{"role": "system", "content": "You are an advanced data analytics expert, you create extremely visually appealing reports."}
 	]
 
-	log_message("🔄 Sending request to OpenAI for AI-generated code...")
+	log_debug_event("Sending request to OpenAI for AI-generated code for data analytics...")
 
 	ai_prompt = f"""
 	You are an advanced data analytics expert. Your job is to:
@@ -179,7 +172,7 @@ def generate_ai_code(file_path, instructions):
 	for attempt in range(max_attempts):
 		if attempt == reset_history_after:
 			chat_history = [chat_history[0], {"role": "user", "content": ai_prompt}]
-			log_message("🔄 Resetting conversation history after repeated syntax failures.")
+			log_debug_event("Resetting conversation history after repeated syntax failures for data_analytics AI code gen.")
 
 		try:
 			response = client.chat.completions.create(
@@ -188,14 +181,14 @@ def generate_ai_code(file_path, instructions):
 			)
 			ai_code = response.choices[0].message.content.strip()
 
-			log_message(f"✅ AI-generated code received (Attempt {attempt+1}/{max_attempts})")
+			log_debug_event(f"AI-generated code for data_analytics received (Attempt {attempt+1}/{max_attempts})")
 
 			ai_code = ai_code.replace("```python", "").replace("```", "").strip()
 
 			if execute_ai_code(ai_code):
 				return ai_code
 			else:
-				log_message("❌ AI-generated code execution failed. Retrying...")
+				log_debug_event("AI-generated code execution failed for data_analytics. Retrying...", is_error=True)
 
 		except Exception as e:
 			log_error(f"❌ AI code generation failed: {e}")

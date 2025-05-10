@@ -7,6 +7,7 @@ import tempfile
 import openai
 from dotenv import load_dotenv
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 from PIL import Image
 import io
 
@@ -34,8 +35,7 @@ def generate_image(prompt: str, save_path: str = None):
 	if not OPENAI_API_KEY:
 		return {"error": "OpenAI API key is missing."}
 	
-	if get_debug_mode():
-		print(f"[🖼️ Generating image] Prompt: {prompt}")
+	log_debug_event(f"Generating image with prompt: {prompt}")
 	
 	try:
 		# Generate the image
@@ -104,8 +104,7 @@ def analyze_image(image_path: str):
 	if not os.path.exists(image_path):
 		return {"error": f"Image file not found: {image_path}"}
 	
-	if get_debug_mode():
-		print(f"[🔍 Analyzing image] Path: {image_path}")
+	log_debug_event(f"Analyzing image at path: {image_path}")
 	
 	try:
 		# Read and encode the image

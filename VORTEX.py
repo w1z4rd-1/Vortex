@@ -52,7 +52,8 @@ else:
     try:
         from src.VOICE.voice import detect_wake_word, record_audio, transcribe_audio, tts_speak, wait_for_tts_completion, is_tts_available, list_audio_devices
         # --- VORTEX.PY CHANGE: Import the renamed function ---
-        from src.Boring.boring import call_ai_provider, add_user_input, display_startup_message
+        from src.Boring.boring import call_ai_provider, add_user_input, display_startup_message, initialize_ai_client_for_loop
+        from src.Boring.debug_logger import log_debug_event
         # -----------------------------------------------------
         from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
     except ImportError as e:
@@ -117,7 +118,7 @@ async def main():
             await asyncio.sleep(0.1)  # Small delay to ensure TTS queue is updated
             if is_tts_available():
                 if not wait_for_tts_completion(timeout=0.5):
-                    if get_debug_mode(): print("[DEBUG] Waiting for TTS to complete before listening...")
+                    log_debug_event("Waiting for TTS to complete before listening...")
                     while not wait_for_tts_completion(timeout=0.5):
                         await asyncio.sleep(0.1)
                     # Add a small pause after speech completion before listening
@@ -125,6 +126,7 @@ async def main():
             # --- End of VORTEX.PY CHANGE ---
             
             # --- VORTEX.PY CHANGE: Wake word detection disabled --- 
+            # log_debug_event("Wake word detection is currently disabled in VORTEX.py main loop.")
             # print("[Waiting for wake word...]")
             
             # try:
@@ -233,6 +235,7 @@ async def main():
             if get_debug_mode():
                 import traceback
                 traceback.print_exc()
+                log_debug_event(f"Traceback printed for critical main loop error: {e}", is_error=True)
             print(f"{COLOR_YELLOW}[INFO] Attempting to continue...{COLOR_RESET}")
             await asyncio.sleep(5) # Wait significantly longer after a major loop error
 
@@ -263,6 +266,7 @@ def start_web_interface():
         if get_debug_mode():
             import traceback
             traceback.print_exc()
+            log_debug_event(f"Traceback printed for web interface startup error: {e}", is_error=True)
 
 def stop_web_interface():
     """Stop the VORTEX web interface"""
@@ -315,6 +319,19 @@ if __name__ == "__main__":
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+            # Initialize AI client within the new loop/thread context
+            try:
+                initialize_ai_client_for_loop()
+            except Exception as client_init_e:
+                print(f"{COLOR_RED}[FATAL ERROR] AI Client initialization failed in thread: {client_init_e}{COLOR_RESET}")
+                # Log to debug logger if available
+                try: log_debug_event(f"AI Client init failed: {client_init_e}", is_error=True) 
+                except: pass # Avoid error in error handling
+                # Signal shutdown or exit if client is critical
+                shutdown_event.set()
+                return # Exit this function, thread will stop
+
             # Run until main() completes OR shutdown_event is set
             main_task = loop.create_task(main())
             monitor_task = loop.create_task(monitor_shutdown(shutdown_event, main_task))
@@ -327,6 +344,7 @@ if __name__ == "__main__":
              if get_debug_mode():
                  import traceback
                  traceback.print_exc()
+                 log_debug_event(f"Traceback printed for critical error in async loop runner: {e}", is_error=True)
              shutdown_event.set() # Signal shutdown on unexpected error too
         finally:
             if loop and loop.is_running():

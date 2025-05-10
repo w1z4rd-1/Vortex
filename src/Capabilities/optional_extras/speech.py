@@ -9,6 +9,7 @@ from pydub.playback import play
 from dotenv import load_dotenv
 import re
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 
 # Load environment variables
 load_dotenv()
@@ -60,8 +61,7 @@ async def speak_text(input_text: str):
 	if not OPENAI_API_KEY:
 		return {"error": "OpenAI API key is missing."}
 	
-	if get_debug_mode():
-		print(f"[🗣️ Speaking] {input_text}")
+	log_debug_event(f"Speaking: {input_text}")
 	
 	try:
 		# Parse speech syntax but don't filter thoughts anymore

@@ -31,6 +31,11 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
+# VORTEX specific imports for debug linking
+from src.Boring.debug_logger import register_frontend_debug_emitter
+from src.Capabilities.debug_mode import get_debug_mode as core_get_debug_mode # To check if debug mode is on for initial registration message
+from src.Capabilities.debug_mode import inspect_registry # Added to get capabilities list
+
 # Check for FFmpeg availability
 FFMPEG_AVAILABLE = False
 try:
@@ -514,6 +519,19 @@ def process_audio():
 def handle_connect():
     """Handle client connection"""
     app.logger.info(f"Client connected: {request.sid}")
+    # Emit the current list of capabilities to the newly connected client
+    try:
+        capabilities_info = inspect_registry()
+        if isinstance(capabilities_info, dict):
+            emit('capabilities_list_update', capabilities_info)
+            app.logger.info(f"Emitted capabilities list to client {request.sid} on connect. Data: {capabilities_info}")
+        else: # inspect_registry returned an error string
+            app.logger.warning(f"Could not send capabilities on connect, inspect_registry returned an error string: {capabilities_info}")
+            # Optionally emit an error to the client too
+            emit('capabilities_list_update', {'error': 'Failed to retrieve capabilities list on connect.', 'details': str(capabilities_info)})
+    except Exception as e:
+        app.logger.error(f"Error sending capabilities list on connect: {e}")
+        emit('capabilities_list_update', {'error': f'Error sending capabilities list on connect: {str(e)}'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -672,6 +690,21 @@ async def api_tts():
         # If not using OpenAI, we indicate that the client should use browser's speech synthesis
         return jsonify({"message": "OpenAI TTS not configured, use client-side synthesis."}), 202 # 202 Accepted, but not processed by this endpoint for TTS
 
+# --- Debug Log Emitter for Backend Modules ---
+def emit_debug_to_frontend(message: str, is_error: bool = False):
+    """Emits a debug message from the backend to frontend via SocketIO."""
+    try:
+        socketio.emit('debug_message', {'message': message, 'is_error': is_error, 'timestamp': datetime.now().isoformat()})
+    except Exception as e:
+        # Fallback to app logger if socketio fails (e.g., during shutdown)
+        log_func = app.logger.error if is_error else app.logger.info
+        log_func(f"[WebUI Debug Emit Failed] {message} - Error: {e}")
+
+# Register the frontend emitter with the new debug logger
+if __name__ != '__main__': # Ensure this runs when imported, not just when run directly (e.g. by VORTEX.py)
+    print("[REMOTE_APP_SETUP] Attempting to register frontend debug emitter with debug_logger.")
+    register_frontend_debug_emitter(emit_debug_to_frontend)
+
 # This is only run when the script is executed directly, not when imported
 if __name__ == '__main__':
     # Set debug mode for the web interface
@@ -684,4 +717,24 @@ if __name__ == '__main__':
     print(f"Web interface available at http://127.0.0.1:{port}")
     
     # Start the Flask application
-    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True, use_reloader=False) 
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)
+
+# New SocketIO event handler to explicitly request the capabilities list
+@socketio.on('get_capabilities_list')
+def handle_get_capabilities_list():
+    app.logger.info(f"Client {request.sid} requested capabilities list.")
+    try:
+        capabilities_info = inspect_registry()
+        if isinstance(capabilities_info, dict):
+            emit('capabilities_list_update', capabilities_info)
+            app.logger.info(f"Sent capabilities list to client {request.sid}. Data: {capabilities_info}")
+        else: # inspect_registry returned an error string
+            emit('capabilities_list_update', {'error': 'Failed to retrieve capabilities list.', 'details': str(capabilities_info)})
+            app.logger.warning(f"Could not send capabilities list, inspect_registry returned an error string: {capabilities_info}")
+    except Exception as e:
+        app.logger.error(f"Error retrieving/sending capabilities list: {e}")
+        emit('capabilities_list_update', {'error': f'Error retrieving capabilities: {str(e)}'})
+
+# Register the emitter with VORTEX core
+# if VORTEX_IMPORTS_OK: # This call is redundant, the one in "if __name__ != '__main__'" block handles it.
+#    register_frontend_debug_emitter(emit_debug_to_frontend) 

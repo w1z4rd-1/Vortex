@@ -229,6 +229,7 @@ class AudioRecorder {
         const canvas = this.options.visualizer;
         if (!canvas || !canvas.getContext) {
             console.warn('Invalid canvas element for visualizer');
+            this.options.visualizer = null; // Disable visualizer if canvas is invalid
             return;
         }
         
@@ -236,56 +237,89 @@ class AudioRecorder {
         this.bufferLength = this.analyser.frequencyBinCount;
         this.dataArray = new Uint8Array(this.bufferLength);
         
-        // Make sure canvas is responsive
+        // Get theme colors from CSS variables
+        try {
+            const styles = getComputedStyle(document.documentElement);
+            this.vizColorCyan = styles.getPropertyValue('--accent-cyan').trim() || '#00FFFF';
+            this.vizColorMagenta = styles.getPropertyValue('--accent-magenta').trim() || '#FF00FF';
+            this.vizBgColor = styles.getPropertyValue('--bg-accent').trim() || '#1C202E';
+        } catch (e) {
+            console.warn("Could not read CSS variables for visualizer, using defaults.");
+            this.vizColorCyan = '#00FFFF';
+            this.vizColorMagenta = '#FF00FF';
+            this.vizBgColor = '#1C202E';
+        }
+
+        // Ensure canvas is not hidden by parent
+        canvas.style.display = 'block';
+
         const resizeCanvas = () => {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
+            if (!this.options.visualizer) return;
+            // Make canvas sharp on HiDPI displays
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            this.visualizerContext.scale(dpr, dpr); // Scale context to match
         };
         
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        // Use ResizeObserver if available for more robust resizing
+        if (typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(resizeCanvas);
+            resizeObserver.observe(canvas.parentElement); // Observe parent container
+        } else {
+            window.addEventListener('resize', resizeCanvas);
+        }
+        resizeCanvas(); // Initial call
     }
 
     /**
-     * Draw the audio visualizer
+     * Draw the audio visualizer - Cyberpunk Style
      * @private
      */
     _drawVisualizer() {
-        if (!this.visualizerActive || !this.visualizerContext) return;
-        
-        const canvas = this.options.visualizer;
+        if (!this.visualizerActive || !this.options.visualizer || !this.visualizerContext) {
+            return;
+        }
+
+        requestAnimationFrame(this._drawVisualizer); // Loop the drawing
+
+        this.analyser.getByteFrequencyData(this.dataArray); // Get frequency data
+
         const ctx = this.visualizerContext;
-        const width = canvas.width;
-        const height = canvas.height;
-        
-        // Get the frequency data
-        this.analyser.getByteFrequencyData(this.dataArray);
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, width, height);
-        
-        // Draw visualizer
-        const barWidth = width / this.bufferLength * 2.5;
+        const canvas = this.options.visualizer;
+        // Use logical canvas dimensions for drawing calculations (before DPR scaling)
+        const logicalWidth = canvas.width / (window.devicePixelRatio || 1);
+        const logicalHeight = canvas.height / (window.devicePixelRatio || 1);
+
+        // Clear canvas with a semi-transparent effect for trails
+        ctx.fillStyle = 'rgba(10, 10, 16, 0.3)'; // Darker, more transparent from new theme
+        ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+
+        const barCount = this.bufferLength / 2; // Use about half of the bins for visual clarity
+        const barWidth = (logicalWidth / barCount) * 1.5; // Slightly wider bars
         let x = 0;
-        
-        for (let i = 0; i < this.bufferLength; i++) {
-            const barHeight = this.dataArray[i] / 255 * height;
-            
-            // Create gradient
-            const gradient = ctx.createLinearGradient(0, height, 0, height - barHeight);
-            gradient.addColorStop(0, '#166088');
-            gradient.addColorStop(1, '#2ec4b6');
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x, height - barHeight, barWidth, barHeight);
-            
-            x += barWidth + 1;
+
+        for (let i = 0; i < barCount; i++) {
+            const barHeightScale = this.dataArray[i] / 255.0;
+            let barHeight = barHeightScale * logicalHeight * 0.8; // Max 80% of height
+
+            // Color based on amplitude (simple gradient)
+            const hue = 180 + (barHeightScale * 60); // Cyan to Greenish-blue range
+            ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            // Glow effect for bars
+            ctx.shadowColor = `hsl(${hue}, 100%, 60%)`;
+            ctx.shadowBlur = 8;
+
+            // Draw mirrored bars from center for a more symmetrical/cyberpunk look
+            // Top half
+            ctx.fillRect(x, (logicalHeight / 2) - barHeight, barWidth, barHeight);
+            // Bottom half (mirrored)
+            ctx.fillRect(x, logicalHeight / 2, barWidth, barHeight);
+
+            x += barWidth + 2; // Add spacing between bars
         }
-        
-        // Request next frame
-        if (this.visualizerActive) {
-            requestAnimationFrame(() => this._drawVisualizer());
-        }
+        ctx.shadowBlur = 0; // Reset shadow for other drawings if any
     }
 
     /**

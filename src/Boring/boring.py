@@ -12,6 +12,17 @@ from src.Boring.capabilities import get_function_registry, get_function_schemas
 import src.Boring.capabilities as capabilities
 from src.Capabilities.local.memory import retrieve_memory # Ensure this handles errors gracefully
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
+from .debug_logger import log_debug_event, register_frontend_debug_emitter # MOVED log_debug_event
+
+# ------------------------------
+# Debug Logging Setup
+# ------------------------------
+# MOVED TO debug_logger.py
+# _frontend_debug_emitter = None
+# def register_frontend_debug_emitter(emitter_func):
+# ...
+# def log_debug_event(message: str, is_error: bool = False):
+# ...
 
 # ------------------------------
 # VORTEX Version & Environment Setup
@@ -25,38 +36,55 @@ OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
 # ------------------------------
-# AI Client Initialization
+# AI Client Initialization (Deferred)
 # ------------------------------
 ai_client = None
-if AI_PROVIDER == "openai":
-    if not OPENAI_API_KEY: raise ValueError("OPENAI_API_KEY missing for AI_PROVIDER='openai'")
-    ai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
-    print(f"[CONFIG] Using AI Provider: OpenAI (Model: {OPENAI_MODEL})")
-elif AI_PROVIDER == "ollama":
-    try:
-        # Only use host parameter for client initialization
-        ollama_options = {}
-        if OLLAMA_SERVER:
-            ollama_options['host'] = OLLAMA_SERVER
-            
-        ai_client = ollama.AsyncClient(**ollama_options)
-        # Sync check for connectivity
+
+def initialize_ai_client_for_loop():
+    """Initializes the AI client. Should be called from the asyncio event loop thread."""
+    global ai_client
+    if ai_client is not None: # Prevent re-initialization
+        log_debug_event("AI client already initialized.")
+        return
+
+    log_debug_event(f"Initializing AI client for provider: {AI_PROVIDER}")
+
+    if AI_PROVIDER == "openai":
+        if not OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY missing for AI_PROVIDER='openai'")
+        ai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+        print(f"[CONFIG] Using AI Provider: OpenAI (Model: {OPENAI_MODEL})")
+    elif AI_PROVIDER == "ollama":
         try:
-            sync_client = ollama.Client(**ollama_options)
-            models = sync_client.list() # Simple synchronous check
-            # Handle different response formats
-            if isinstance(models, dict) and 'models' in models:
-                model_names = [m.get('name', str(m)) for m in models['models']]
-                print(f"[CONFIG] Using AI Provider: Ollama (Model: {OLLAMA_MODEL}, Server: {OLLAMA_SERVER or 'Default'}) - Connection OK")
-                print(f"Available models: {model_names}")
-            else:
-                print(f"[CONFIG] Using AI Provider: Ollama (Model: {OLLAMA_MODEL}, Server: {OLLAMA_SERVER or 'Default'}) - Connection OK")
-        except Exception as conn_err:
-             print(f"[WARN] Ollama connection check failed (Server: {OLLAMA_SERVER or 'Default'}): {conn_err}. Proceeding...")
-    except Exception as e:
-        raise RuntimeError(f"Failed to initialize Ollama client: {e}")
-else:
-    raise ValueError(f"Unsupported AI_PROVIDER: {AI_PROVIDER}. Choose 'openai' or 'ollama'.")
+            ollama_options = {}
+            if OLLAMA_SERVER:
+                ollama_options['host'] = OLLAMA_SERVER
+            
+            ai_client = ollama.AsyncClient(**ollama_options)
+            # Sync check for connectivity (this is fine here as it's part of init)
+            try:
+                sync_client = ollama.Client(**ollama_options) # For sync check only
+                models = sync_client.list()
+                if isinstance(models, dict) and 'models' in models:
+                    model_names = [m.get('name', str(m)) for m in models['models']]
+                    print(f"[CONFIG] Using AI Provider: Ollama (Model: {OLLAMA_MODEL}, Server: {OLLAMA_SERVER or 'Default'}) - Connection OK")
+                    print(f"Available models: {model_names}")
+                else:
+                    print(f"[CONFIG] Using AI Provider: Ollama (Model: {OLLAMA_MODEL}, Server: {OLLAMA_SERVER or 'Default'}) - Connection OK")
+            except Exception as conn_err:
+                 print(f"[WARN] Ollama connection check failed (Server: {OLLAMA_SERVER or 'Default'}): {conn_err}. Proceeding...")
+        except Exception as e:
+            # Log the error before raising, to ensure it's visible
+            log_debug_event(f"Failed to initialize Ollama client: {e}", is_error=True)
+            raise RuntimeError(f"Failed to initialize Ollama client: {e}")
+    else:
+        raise ValueError(f"Unsupported AI_PROVIDER: {AI_PROVIDER}. Choose 'openai' or 'ollama'.")
+
+    if ai_client is None:
+        # This case should ideally be caught by the specific provider logic
+        log_debug_event(f"AI client remained None after initialization attempt for {AI_PROVIDER}", is_error=True)
+        raise RuntimeError(f"AI Client could not be initialized for provider: {AI_PROVIDER}")
+    log_debug_event("AI client initialization complete.")
 
 # ------------------------------
 # ANSI Escape Codes for Colors
@@ -80,11 +108,11 @@ def load_system_prompt():
             with open(file_path, "r", encoding="utf-8") as file:
                 content = file.read().strip()
                 if content:
-                    if get_debug_mode(): print(f"[SYSTEM PROMPT] Loaded from {file_path}")
+                    log_debug_event(f"System prompt loaded from {file_path}")
                     return content
         except Exception as e:
             print(f"{COLOR_YELLOW}[WARN] Failed to read systemprompt.txt: {e}. Using default.{COLOR_RESET}")
-    if get_debug_mode(): print(f"[SYSTEM PROMPT] Using default.")
+    log_debug_event("Using default system prompt.")
     return default_prompt
 
 conversation_history = []
@@ -104,7 +132,7 @@ def get_tokenizer():
     if _tokenizer is None:
         try:
             _tokenizer = tiktoken.get_encoding("cl100k_base")
-            if get_debug_mode(): print("[TOKENIZER] Loaded cl100k_base tokenizer.")
+            log_debug_event("Loaded cl100k_base tokenizer.")
         except Exception as e:
             print(f"{COLOR_RED}[ERROR] Failed to load tiktoken tokenizer: {e}.{COLOR_RESET}")
             _tokenizer = None
@@ -117,7 +145,7 @@ def estimate_tokens(text):
         try:
             return len(tokenizer.encode(text, disallowed_special=()))
         except Exception as e:
-            if get_debug_mode(): print(f"[WARN] Token encoding failed: {e}")
+            log_debug_event(f"Token encoding failed: {e}", is_error=True)
             return len(text) // 4
     elif isinstance(text, str):
          return len(text) // 4
@@ -131,8 +159,7 @@ async def _call_openai(conversation_history, tools_param=None, tool_choice_param
     if not ai_client: 
         raise ConnectionError("OpenAI client missing")
         
-    if get_debug_mode(): 
-        print(f"[INFO] Calling OpenAI API with {len(conversation_history)} messages.")
+    log_debug_event(f"Calling OpenAI API with {len(conversation_history)} messages.")
         
     response = await asyncio.wait_for(ai_client.chat.completions.create(
         model=OPENAI_MODEL,
@@ -153,8 +180,7 @@ async def _call_ollama(conversation_history, tools_param=None):
     if not ai_client: 
         raise ConnectionError("Ollama client missing")
         
-    if get_debug_mode(): 
-        print(f"[INFO] Calling Ollama API with {len(conversation_history)} messages.")
+    log_debug_event(f"Calling Ollama API with {len(conversation_history)} messages.")
     
     # Create options for better context maintenance
     ollama_options = {
@@ -167,8 +193,7 @@ async def _call_ollama(conversation_history, tools_param=None):
     # Increase context size if we have many tools
     if tools_param and len(tools_param) > 5:
         ollama_options["num_ctx"] = 16384
-        if get_debug_mode():
-            print(f"[INFO] Increased context window to 16384 due to {len(tools_param)} tools")
+        log_debug_event(f"Increased Ollama context window to 16384 due to {len(tools_param)} tools")
     
     # Following Ollama docs with added options for better context maintenance
     response = await ai_client.chat(
@@ -205,7 +230,7 @@ async def call_ai_provider():
     # --- Memory Retrieval ---
     user_input_for_memory = next((msg["content"] for msg in reversed(conversation_history) if msg["role"] == "user"), None)
     if user_input_for_memory:
-        if get_debug_mode(): print(f"[🧠 MEMORY CHECK] Input: {user_input_for_memory[:50]}...")
+        log_debug_event(f"Memory Check Input: {user_input_for_memory[:50]}...")
         try:
             memories = retrieve_memory(user_input_for_memory)
             if memories:
@@ -213,12 +238,12 @@ async def call_ai_provider():
                 # Insert memory after the system prompt, if it exists
                 insert_pos = 1 if (conversation_history and conversation_history[0]['role'] == 'system') else 0
                 conversation_history.insert(insert_pos, memory_system_message)
-                if get_debug_mode(): print(f"[✅ MEMORY INSERTED] after system prompt.")
+                log_debug_event("Memory inserted after system prompt.")
         except Exception as mem_e: print(f"{COLOR_YELLOW}[WARN] Memory retrieval error: {mem_e}{COLOR_RESET}")
 
     # --- Debug History Info Only ---
     if get_debug_mode():
-        print("[CONVERSATION HISTORY BEFORE API CALL]")
+        log_debug_event("--- Pre-API Call History & Token Estimation ---")
         for i, msg in enumerate(conversation_history):
             content_preview = str(msg.get("content", ""))[:50].replace("\n", "\\n")
             print(f"  [{i}] {msg.get('role')}: {content_preview}...")
@@ -226,22 +251,24 @@ async def call_ai_provider():
         # Calculate total tokens for information only
         try:
             total_tokens = sum(estimate_tokens(msg.get('content', '')) + 5 for msg in conversation_history)
-            print(f"[INFO] Estimated total tokens: ~{total_tokens}")
+            log_debug_event(f"Estimated total tokens for API call: ~{total_tokens}")
         except Exception as e:
-            print(f"[WARN] Token estimation failed: {e}")
+            log_debug_event(f"Token estimation failed: {e}", is_error=True)
 
     # --- AI Call Loop ---
     max_retries = 5; attempt = 0
     while attempt < max_retries:
         attempt += 1
-        if get_debug_mode(): print(f"\n[🔄 CALLING {AI_PROVIDER.upper()}] Attempt {attempt}/{max_retries}")
+        log_debug_event(f"Calling {AI_PROVIDER.upper()} API - Attempt {attempt}/{max_retries}")
 
         # --- Debug Print for History if needed ---
         if get_debug_mode():
-            print("--- Sending History to AI ---")
-            try: print(json.dumps(conversation_history, indent=2))
-            except Exception as dump_e: print(f"(Error dumping history: {dump_e})\n{conversation_history}")
-            print("---------------------------------------------------------------------")
+            log_debug_event("--- Sending Full History to AI (JSON Dump) ---")
+            try: 
+                print(json.dumps(conversation_history, indent=2))
+            except Exception as dump_e: 
+                log_debug_event(f"Error dumping history to JSON: {dump_e}. Raw history: {conversation_history}", is_error=True)
+            log_debug_event("--- End of Full History JSON Dump ---")
 
         # --- Prepare tools/functions ---
         function_schemas = get_function_schemas() or []
@@ -329,18 +356,36 @@ async def call_ai_provider():
                                      continue
                              else: continue
                         elif AI_PROVIDER == 'ollama':
-                             if isinstance(tool_call, dict) and 'function' in tool_call:
-                                 function_name = tool_call.get('function', {}).get('name')
-                                 function_args = tool_call.get('function', {}).get('arguments')
-                                 function_call_id = tool_call.get('id', None)  # Capture ID if available
-                                 # Handle case where arguments is a string (needs to be parsed)
-                                 if isinstance(function_args, str):
-                                     try:
-                                         function_args = json.loads(function_args)
-                                     except json.JSONDecodeError:
-                                         print(f"{COLOR_RED}[❌ JSON ERROR] Invalid JSON args for Ollama tool {function_name}{COLOR_RESET}")
+                             # tool_call is an object from ollama.py (e.g., ollama.ToolCall)
+                             if hasattr(tool_call, 'function') and tool_call.function and \
+                                hasattr(tool_call.function, 'name') and \
+                                hasattr(tool_call.function, 'arguments'):
+
+                                 function_name = tool_call.function.name
+                                 function_args = tool_call.function.arguments # This should be a dict
+
+                                 # Ollama's library ToolCall object does not consistently define an 'id' attribute.
+                                 # Attempt to get 'id' if present on tool_call itself using getattr.
+                                 # The 'name' field in the tool response message is primarily used.
+                                 function_call_id = getattr(tool_call, 'id', None)
+
+                                 # Ensure arguments are a dictionary. The ollama library should provide this.
+                                 if not isinstance(function_args, dict):
+                                     print(f"{COLOR_RED}[❌ ARG TYPE ERROR] Ollama tool {function_name} arguments not a dict: {type(function_args)}{COLOR_RESET}")
+                                     # Attempt to parse if it's a string, as a fallback.
+                                     if isinstance(function_args, str):
+                                         try:
+                                             function_args = json.loads(function_args)
+                                         except json.JSONDecodeError:
+                                             print(f"{COLOR_RED}[❌ JSON ERROR] Invalid JSON string args for Ollama tool {function_name}{COLOR_RESET}")
+                                             continue
+                                     else:
+                                         # If not a dict and not a parsable string, skip this tool call.
+                                         if get_debug_mode(): print(f"[DEBUG] Skipping Ollama tool {function_name} due to unparsable arguments.")
                                          continue
-                             else: continue
+                             else:
+                                 if get_debug_mode(): print(f"[DEBUG] Skipping Ollama tool_call due to missing function/name/arguments attributes: {tool_call}")
+                                 continue
                         else: continue
 
                         if not function_name or function_args is None: continue

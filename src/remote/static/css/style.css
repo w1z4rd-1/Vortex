@@ -7,21 +7,27 @@
 }
 
 :root {
-    --bg-primary: #0d0d0d;      /* Very dark background */
-    --bg-secondary: #1a1a1a;    /* Slightly lighter background for elements */
-    --bg-accent: #2a2a2a;       /* Background for interactive elements */
-    --text-primary: #e0e0e0;   /* Light gray for main text */
-    --text-secondary: #a0a0a0; /* Dimmer text */
-    --accent-cyan: #00ffff;      /* Neon cyan accent */
-    --accent-magenta: #ff00ff;    /* Neon magenta accent */
-    --accent-lime: #7fff00;       /* Neon lime accent */
-    --error-color: #ff4136;     /* Red for errors */
+    --bg-primary: #0A0A10;      /* Deeper, slightly blueish dark background */
+    --bg-secondary: #141821;    /* Slightly lighter, cool-toned background */
+    --bg-accent: #1C202E;       /* Background for interactive elements */
+    --text-primary: #E0E6F0;   /* Light, slightly cool text */
+    --text-secondary: #A0A8B8; /* Dimmer, cool text */
+    --accent-cyan: #00FFFF;      /* Neon cyan accent */
+    --accent-magenta: #FF00FF;    /* Neon magenta accent */
+    --accent-lime: #7FFF00;       /* Neon lime accent */
+    --accent-orange: #FFA500;    /* Added Neon orange accent */
+    --accent-blue: #00BFFF;      /* Added Neon blue accent */
+    --error-color: #FF4136;     /* Red for errors */
     --success-color: var(--accent-cyan); /* Use cyan for success */
-    --shadow-light: 0 0 8px rgba(0, 255, 255, 0.3);
-    --shadow-medium: 0 0 15px rgba(0, 255, 255, 0.5);
-    --border-color: #444;
+    --border-color: #30384D;    /* Cooler, more defined border */
+    --shadow-color-cyan: rgba(0, 255, 255, 0.55);
+    --shadow-color-magenta: rgba(255, 0, 255, 0.55);
+    --shadow-light: 0 0 8px var(--shadow-color-cyan);
+    --shadow-medium: 0 0 15px var(--shadow-color-cyan);
+    --shadow-strong: 0 0 25px var(--shadow-color-cyan);
     --font-primary: 'Orbitron', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    --font-secondary: 'Roboto Mono', monospace;
+    --font-secondary: 'Roboto Mono', 'Consolas', monospace; /* Added Consolas as fallback */
+    --glow-transition: box-shadow 0.3s ease-in-out, background-color 0.3s ease-in-out, transform 0.2s ease-in-out;
 }
 
 /* Import Google Fonts */
@@ -33,15 +39,24 @@ body {
     color: var(--text-primary);
     background-color: var(--bg-primary);
     min-height: 100vh;
+    display: flex; /* Added for centering container better */
+    justify-content: center; /* Added */
+    align-items: center; /* Added */
+    padding: 10px; /* Added for small screens */
 }
 
 .container {
-    max-width: 1200px;
+    width: 100%; /* Changed from max-width */
+    max-width: 1400px; /* Increased max-width */
     margin: 0 auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    min-height: calc(100vh - 40px); /* Adjust for body padding */
+    background-image: linear-gradient(to bottom right, var(--bg-primary) 0%, var(--bg-secondary) 100%); /* Added Gradient */
+    border: 1px solid var(--border-color);
+    box-shadow: 0 0 30px rgba(0,0,0,0.3), 0 0 15px var(--accent-blue) inset; /* Outer and inner shadow */
+    border-radius: 8px; /* Slightly rounded container */
 }
 
 /* Header Styles */
@@ -49,11 +64,11 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 0;
-    margin-bottom: 25px;
+    padding: 20px 0; /* Increased padding */
+    margin-bottom: 20px; /* Adjusted margin */
     flex-wrap: wrap;
     border-bottom: 1px solid var(--accent-cyan);
-    box-shadow: var(--shadow-light);
+    box-shadow: 0 2px 10px var(--shadow-color-cyan); /* Enhanced shadow */
 }
 
 .logo {
@@ -64,26 +79,33 @@ header {
 
 .logo h1 {
     font-family: var(--font-primary);
-    font-size: 3rem;
+    font-size: 2.8rem; /* Slightly adjusted */
     color: var(--accent-cyan);
     margin: 0;
-    text-shadow: 0 0 5px var(--accent-cyan);
+    text-shadow: 0 0 4px var(--accent-cyan), 0 0 8px var(--accent-cyan), 0 0 12px rgba(0, 255, 255, 0.7); /* Reduced glow intensity */
     font-weight: 700;
+    transition: text-shadow 0.3s ease;
+}
+
+.logo h1:hover {
+    text-shadow: 0 0 6px var(--accent-cyan), 0 0 12px var(--accent-cyan), 0 0 20px var(--accent-cyan), 0 0 3px #fff; /* Adjusted hover brightness */
 }
 
 .logo h2 {
     font-family: var(--font-secondary);
-    font-size: 1rem;
+    font-size: 0.9rem; /* Adjusted */
     color: var(--text-secondary);
     font-weight: normal;
-    margin-top: -8px;
-    letter-spacing: 1px;
+    margin-top: -5px; /* Adjusted */
+    letter-spacing: 1.5px; /* Increased spacing */
+    text-transform: uppercase; /* Added */
 }
 
 .controls {
     display: flex;
-    gap: 25px;
+    gap: 20px; /* Adjusted gap */
     flex-wrap: wrap;
+    align-items: center; /* Align items better */
 }
 
 /* Toggle Switch */
@@ -107,49 +129,49 @@ header {
 .toggle-slider {
     position: relative;
     display: inline-block;
-    width: 50px;
-    height: 24px;
+    width: 48px; /* Adjusted */
+    height: 22px; /* Adjusted */
     background-color: var(--bg-accent);
     border: 1px solid var(--border-color);
-    border-radius: 3px; /* Sharper edge */
-    transition: .4s;
-    margin-right: 10px;
+    border-radius: 2px; /* Sharper edge */
+    transition: .3s;
+    margin-right: 8px; /* Adjusted */
 }
 
 .toggle-slider:before {
     position: absolute;
     content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 2px;
+    height: 16px; /* Adjusted */
+    width: 16px; /* Adjusted */
+    left: 2px; /* Adjusted */
+    bottom: 2px; /* Adjusted */
     background-color: var(--text-secondary);
     border-radius: 1px; /* Sharper edge */
-    transition: .4s;
+    transition: .3s;
 }
 
 input:checked + .toggle-slider {
     background-color: var(--accent-cyan);
-    box-shadow: var(--shadow-light);
+    box-shadow: 0 0 8px var(--shadow-color-cyan);
 }
 
 input:checked + .toggle-slider:before {
     transform: translateX(26px);
-    background-color: var(--bg-primary);
+    background-color: var(--bg-primary); /* Contrast for knob */
 }
 
 input:disabled + .toggle-slider {
-    background-color: #333;
+    background-color: #2a2a2a; /* Darker disabled state */
     cursor: not-allowed;
     box-shadow: none;
 }
 
 input:disabled + .toggle-slider:before {
-    background-color: #555;
+    background-color: #444; /* Darker disabled knob */
 }
 
 .toggle-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem; /* Adjusted */
     color: var(--text-secondary);
     font-family: var(--font-secondary);
 }
@@ -163,56 +185,70 @@ input:disabled ~ .toggle-label {
 }
 
 /* Microphone Selector */
-.microphone-selector {
-    background-color: var(--bg-secondary);
-    padding: 20px;
-    margin-bottom: 25px;
+.microphone-selector, .sidebar .debug-log {
+    background-color: rgba(10, 10, 16, 0.5); /* More transparent dark bg */
+    padding: 15px; /* Adjusted */
+    margin-bottom: 20px; /* Adjusted */
     border: 1px solid var(--border-color);
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6);
+    border-radius: 4px; /* Slight rounding */
 }
 
-.microphone-selector h3 {
+.microphone-selector h3, .sidebar .debug-log h3 {
     color: var(--accent-magenta);
     margin-bottom: 15px;
-    font-size: 1.2rem;
+    font-size: 1.1rem; /* Adjusted */
     font-family: var(--font-primary);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.2px; /* Adjusted */
+    text-shadow: 0 0 3px var(--accent-magenta);
 }
 
 #mic-init-prompt p {
-    margin-bottom: 10px;
+    margin-bottom: 12px; /* Adjusted */
     color: var(--text-secondary);
 }
 
-#enableMicButton {
-    padding: 10px 20px;
-    font-size: 1rem;
+#enableMicButton, .generic-button {
+    padding: 10px 18px; /* Adjusted */
+    font-size: 0.9rem; /* Adjusted */
     background-color: var(--accent-cyan);
     color: var(--bg-primary);
-    border: none;
+    border: 1px solid var(--accent-cyan);
     border-radius: 3px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: var(--glow-transition), color 0.3s ease;
     font-family: var(--font-secondary);
+    font-weight: bold;
     margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-#enableMicButton:hover {
-    box-shadow: var(--shadow-medium);
-    filter: brightness(1.2);
+#enableMicButton:hover, .generic-button:hover {
+    box-shadow: 0 0 12px var(--shadow-color-cyan), 0 0 5px var(--shadow-color-cyan) inset;
+    background-color: var(--accent-cyan); /* Keep bg on hover */
+    color: #000; /* Darker text on hover for contrast */
+    transform: translateY(-1px);
 }
 
-#enableMicButton:disabled {
+#enableMicButton:active, .generic-button:active {
+    transform: translateY(0px);
+    box-shadow: 0 0 5px var(--shadow-color-cyan);
+}
+
+#enableMicButton:disabled, .generic-button:disabled {
     background-color: var(--bg-accent);
     color: var(--text-secondary);
+    border-color: var(--border-color);
     cursor: not-allowed;
     box-shadow: none;
-    filter: none;
+    filter: grayscale(50%);
+    transform: translateY(0);
 }
 
 .mic-status-message {
-    font-size: 0.9em;
+    font-size: 0.85em; /* Adjusted */
     color: var(--accent-lime);
     min-height: 1.2em; /* Reserve space */
 }
@@ -227,347 +263,580 @@ input:disabled ~ .toggle-label {
     display: flex;
     align-items: center;
     cursor: pointer;
-    padding: 8px 15px;
+    padding: 8px 12px; /* Adjusted */
     background-color: var(--bg-accent);
     border: 1px solid var(--border-color);
     border-radius: 3px;
-    transition: all 0.3s;
+    transition: var(--glow-transition);
     color: var(--text-secondary);
+    font-size: 0.85rem; /* Added */
 }
 
 .radio-label:hover {
-    background-color: var(--accent-cyan);
+    background-color: var(--accent-orange); /* Changed hover color */
     color: var(--bg-primary);
-    border-color: var(--accent-cyan);
-    box-shadow: var(--shadow-light);
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.6);
 }
 
 .radio-label input {
-    margin-right: 10px;
+    margin-right: 8px; /* Adjusted */
     accent-color: var(--accent-magenta);
+    transition: transform 0.2s;
+}
+
+.radio-label input:hover {
+    transform: scale(1.1);
 }
 
 input[type="radio"]:checked + span {
-    color: var(--accent-magenta);
+    color: var(--accent-orange); /* Match hover */
     font-weight: bold;
+}
+
+.radio-group input[type="radio"]:checked + .radio-text { /* if text is in a span.radio-text */
+    color: var(--accent-orange);
+}
+
+.radio-label:has(input:checked) { /* Style label when radio is checked */
+    background-color: var(--accent-orange);
+    border-color: var(--accent-orange-glow);
+    box-shadow: 0 0 10px var(--accent-orange-glow);
+    color: #111111; /* Darker text color for better contrast on orange */
+    font-weight: bold; /* Make it pop a bit more */
 }
 
 /* Main Content Area */
 main {
     display: flex;
-    flex: 1;
-    gap: 25px;
+    gap: 20px; /* Space between chat and sidebar */
+    flex-grow: 1; /* Allow main to take up remaining space */
+    overflow: hidden; /* Prevent scrollbars on main if children handle it */
 }
 
 .chat-container {
-    flex: 7;
-    background-color: var(--bg-secondary);
+    flex-grow: 1; /* Chat takes up most space */
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    background-color: rgba(10, 10, 16, 0.5); /* Transparent dark bg */
     border: 1px solid var(--border-color);
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    border-radius: 4px;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6);
+    overflow: hidden; /* Important for child scrolling */
 }
 
 #conversation {
-    flex: 1;
-    padding: 20px;
+    flex-grow: 1;
+    padding: 15px; /* Increased padding */
     overflow-y: auto;
-    max-height: 60vh;
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-cyan) var(--bg-accent);
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Space between messages */
 }
 
-#conversation::-webkit-scrollbar {
+/* Custom Scrollbars */
+#conversation::-webkit-scrollbar, #debugLog::-webkit-scrollbar {
     width: 8px;
 }
-#conversation::-webkit-scrollbar-track {
+
+#conversation::-webkit-scrollbar-track, #debugLog::-webkit-scrollbar-track {
     background: var(--bg-accent);
-}
-#conversation::-webkit-scrollbar-thumb {
-    background-color: var(--accent-cyan);
-    border-radius: 0;
-    border: 1px solid var(--bg-accent);
+    border-radius: 4px;
 }
 
+#conversation::-webkit-scrollbar-thumb, #debugLog::-webkit-scrollbar-thumb {
+    background-color: var(--accent-cyan);
+    border-radius: 4px;
+    border: 2px solid var(--bg-accent); /* Creates padding around thumb */
+}
+
+#conversation::-webkit-scrollbar-thumb:hover, #debugLog::-webkit-scrollbar-thumb:hover {
+    background-color: var(--accent-magenta);
+}
+
+/* Chat Message Bubbles */
 .message {
-    margin-bottom: 15px;
-    padding: 12px 18px;
-    max-width: 85%;
-    word-wrap: break-word;
-    border: 1px solid var(--border-color);
-    position: relative;
-    line-height: 1.5;
+    padding: 10px 15px;
+    border-radius: 12px; /* Rounded bubbles */
+    max-width: 85%; /* Max width of bubbles */
+    display: flex; /* For timestamp alignment */
+    flex-direction: column;
+    position: relative; /* For pseudo-elements (tails) */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    word-wrap: break-word; /* Ensure long words break */
 }
 
 .user-message {
-    background-color: rgba(0, 255, 255, 0.1); /* Cyan tint */
-    color: var(--text-primary);
-    align-self: flex-end;
-    margin-left: auto;
-    border-left: 3px solid var(--accent-cyan);
-    border-radius: 3px 0 0 3px;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary); /* Dark text for contrast */
+    align-self: flex-end; /* User messages to the right */
+    border-radius: 12px 12px 0 12px; /* Tail effect */
+    margin-left: auto; /* Push to right */
+}
+
+.user-message .message-content {
+    color: #FFFFFF; /* White text on blue bg */
 }
 
 .assistant-message {
-    background-color: rgba(255, 0, 255, 0.1); /* Magenta tint */
+    background-color: var(--bg-accent); /* Darker bubble for assistant */
     color: var(--text-primary);
-    align-self: flex-start;
-    border-right: 3px solid var(--accent-magenta);
-    border-radius: 0 3px 3px 0;
+    align-self: flex-start; /* Assistant messages to the left */
+    border: 1px solid var(--border-color);
+    border-radius: 12px 12px 12px 0; /* Tail effect */
+    margin-right: auto; /* Push to left */
 }
 
 .system-message {
-    background-color: rgba(127, 255, 0, 0.1); /* Lime tint */
-    color: var(--text-secondary);
     font-style: italic;
-    font-size: 0.9em;
-    align-self: center;
-    width: 90%;
+    color: var(--text-secondary);
     text-align: center;
-    border: 1px dashed var(--accent-lime);
-    border-radius: 3px;
+    font-size: 0.85rem;
+    background-color: transparent;
+    box-shadow: none;
+    border: none;
+    padding: 5px;
+    max-width: 100%;
+}
+
+.message-content { /* New class for the actual text content within a bubble */
+    margin-bottom: 5px; /* Space before timestamp */
+    font-size: 0.95rem;
 }
 
 .message-timestamp {
-    font-size: 0.75em;
-    color: var(--text-secondary);
-    position: absolute;
-    bottom: 3px;
-    right: 8px;
-    opacity: 0.6;
+    font-size: 0.7rem;
+    color: rgba(224, 230, 240, 0.6); /* Lighter timestamp for primary text */
+    align-self: flex-end;
 }
 
 .user-message .message-timestamp {
-    right: auto;
-    left: 8px;
+    color: rgba(0, 0, 0, 0.6); /* Darker timestamp for user message */
 }
 
+/* Input Area */
 .input-area {
     display: flex;
-    padding: 15px;
-    background-color: var(--bg-primary);
-    border-top: 1px solid var(--accent-cyan);
+    padding: 10px;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-secondary); /* Match container bg */
+    gap: 10px;
+    align-items: stretch; /* Make items same height initially */
+    flex-wrap: wrap; /* Allow items to wrap to the next line */
 }
 
 #userInput {
-    flex: 1;
-    padding: 12px 15px;
-    border: 1px solid var(--border-color);
+    flex-grow: 1;
+    padding: 12px;
     background-color: var(--bg-accent);
     color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 3px;
-    resize: none;
-    height: 48px;
-    outline: none;
     font-family: var(--font-secondary);
+    font-size: 0.95rem;
+    resize: none; /* Prevent manual resize, use rows attribute if needed */
     transition: border-color 0.3s, box-shadow 0.3s;
+    min-height: 48px; /* Consistent height with buttons */
 }
 
 #userInput:focus {
+    outline: none;
     border-color: var(--accent-cyan);
-    box-shadow: var(--shadow-light);
+    box-shadow: 0 0 8px var(--shadow-color-cyan), 0 0 3px var(--shadow-color-cyan) inset;
 }
 
 #sendButton, #micButton {
-    width: 48px;
-    height: 48px;
-    border: 1px solid var(--border-color);
+    padding: 0 15px; /* Padding for icon buttons */
+    font-size: 1.2rem; /* Larger icons */
     background-color: var(--bg-accent);
     color: var(--accent-cyan);
+    border: 1px solid var(--border-color);
     border-radius: 3px;
-    margin-left: 10px;
     cursor: pointer;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
+    transition: var(--glow-transition), color 0.3s ease;
+    display: flex; /* Center icon */
+    align-items: center; /* Center icon */
+    justify-content: center; /* Center icon */
+    min-width: 48px; /* Consistent width */
+    min-height: 48px; /* Consistent height */
 }
 
 #sendButton:hover, #micButton:hover {
+    color: var(--bg-primary); /* Dark icon on hover */
     background-color: var(--accent-cyan);
-    color: var(--bg-primary);
     border-color: var(--accent-cyan);
-    box-shadow: var(--shadow-medium);
+    box-shadow: 0 0 12px var(--shadow-color-cyan);
+    transform: translateY(-1px);
+}
+
+#sendButton:active, #micButton:active {
+    transform: translateY(0px);
+    box-shadow: 0 0 5px var(--shadow-color-cyan);
 }
 
 #micButton.recording {
     background-color: var(--accent-magenta);
     color: var(--bg-primary);
     border-color: var(--accent-magenta);
-    box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+    box-shadow: 0 0 12px var(--shadow-color-magenta), 0 0 0 3px rgba(255,0,255,0.3) inset; /* Pulsing effect idea */
+    animation: pulseShadow 1.5s infinite;
+}
+
+@keyframes pulseShadow {
+    0% { box-shadow: 0 0 8px var(--shadow-color-magenta), 0 0 0 0px rgba(255,0,255,0.2) inset; }
+    50% { box-shadow: 0 0 15px var(--shadow-color-magenta), 0 0 0 5px rgba(255,0,255,0.4) inset; }
+    100% { box-shadow: 0 0 8px var(--shadow-color-magenta), 0 0 0 0px rgba(255,0,255,0.2) inset; }
 }
 
 /* Sidebar */
 .sidebar {
-    flex: 3;
+    width: 300px; /* Fixed width for sidebar */
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
     display: flex;
     flex-direction: column;
-    gap: 25px;
+    gap: 20px;
+    overflow: hidden; /* Children will scroll */
 }
 
 .debug-log {
-    background-color: var(--bg-secondary);
-    border-radius: 0;
-    padding: 15px;
-    flex: 1;
-    border: 1px solid var(--border-color);
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-}
-
-.debug-log h3 {
-    color: var(--accent-lime);
-    margin-bottom: 15px;
-    font-size: 1.1rem;
-    font-family: var(--font-primary);
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    flex-grow: 1; /* Debug log takes available space in sidebar */
+    display: flex; /* To make #debugLog child scrollable */
+    flex-direction: column;
+    overflow: hidden; /* for #debugLog to scroll */
 }
 
 #debugLog {
-    overflow-y: auto;
-    max-height: 60vh;
-    font-family: var(--font-secondary);
-    font-size: 0.85rem;
-    line-height: 1.5;
-    color: var(--text-secondary);
     padding: 10px;
-    background-color: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    scrollbar-width: thin;
-    scrollbar-color: var(--accent-lime) var(--bg-accent);
+    background-color: rgba(0,0,0,0.3); /* Slightly darker background for content area */
+    border-radius: 3px;
+    font-family: var(--font-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    min-height: 100px; /* Minimum height */
+    max-height: 200px; /* Fixed max height */
+    overflow-y: auto;  /* Enable vertical scrollbar when needed */
+    border: 1px solid var(--border-color); /* Added border for definition */
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.5); /* Inner shadow for depth */
 }
 
-#debugLog::-webkit-scrollbar {
-    width: 8px;
-}
-#debugLog::-webkit-scrollbar-track {
-    background: var(--bg-accent);
-}
-#debugLog::-webkit-scrollbar-thumb {
-    background-color: var(--accent-lime);
-    border-radius: 0;
-    border: 1px solid var(--bg-accent);
-}
-
-.log-info {
-    color: var(--text-secondary);
+.log-entry {
+    color: var(--text-primary); /* Brighter info logs */
 }
 
 .log-error {
     color: var(--error-color);
     font-weight: bold;
+    text-shadow: 0 0 3px var(--error-color);
 }
 
 /* Audio Visualizer */
 #visualizer-container {
-    width: 100%;
-    height: 100px;
-    margin: 25px 0;
-    background-color: var(--bg-secondary);
-    overflow: hidden;
+    padding: 10px 0;
+    margin-top: 15px;
+    margin-bottom: 10px; /* Space before footer */
+    background-color: rgba(10, 10, 16, 0.5);
     border: 1px solid var(--border-color);
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    border-radius: 4px;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6);
+    display: flex; /* Center canvas */
+    justify-content: center; /* Center canvas */
+    align-items: center; /* Center canvas */
+    min-height: 80px; /* Give it some base height */
 }
 
 #audioVisualizer {
-    width: 100%;
-    height: 100%;
-    display: block;
+    width: 98%; /* Take most of container */
+    height: 80px; /* Fixed height */
+    border-radius: 2px;
 }
 
 /* Footer */
 footer {
-    margin-top: 25px;
     text-align: center;
     padding: 15px 0;
+    margin-top: auto; /* Push footer to bottom of container */
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     border-top: 1px solid var(--border-color);
+}
+
+footer p {
+    letter-spacing: 1px;
+}
+
+footer a {
+    color: var(--accent-cyan);
+    text-decoration: none;
+    transition: color 0.3s, text-shadow 0.3s;
+}
+
+footer a:hover {
+    color: var(--accent-magenta);
+    text-shadow: 0 0 5px var(--accent-magenta);
 }
 
 /* Responsive Design */
 @media (max-width: 900px) {
+    body {
+        padding: 0; /* Remove body padding for smaller screens */
+        align-items: flex-start; /* Align container to top */
+    }
+    .container {
+        min-height: 100vh; /* Full viewport height */
+        border-radius: 0; /* No border radius on small screens */
+        border: none; /* No border */
+        padding: 10px; /* Reduce padding */
+    }
     main {
-        flex-direction: column;
+        flex-direction: column; /* Stack chat and sidebar */
     }
-    
-    .chat-container, .sidebar {
-        width: 100%;
+    .sidebar {
+        width: 100%; /* Full width sidebar */
+        max-height: 300px; /* Limit sidebar height */
+        flex-direction: column-reverse; /* Debug log might be more useful on top or tabbed */
     }
-    
-    header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
+    .debug-log {
+        max-height: 200px; /* Limit height */
     }
-    
+    .logo h1 {
+        font-size: 2.2rem;
+    }
     .controls {
-        margin-top: 15px;
-        width: 100%;
-        justify-content: space-around;
+        gap: 15px;
+        justify-content: center; /* Center controls on smaller screens */
+    }
+    #conversation {
+        padding: 10px;
+    }
+    .message {
+        max-width: 95%;
     }
 }
 
 @media (max-width: 600px) {
     html {
-        font-size: 15px; /* Slightly smaller base font for small screens */
+        font-size: 14px; /* Reduce base font size for readability */
     }
-
     .container {
-        padding: 10px;
+        padding: 5px;
     }
-    
-    #conversation {
-        max-height: 50vh; /* Allow slightly more chat height */
-        padding: 10px;
-    }
-    
-    .message {
-        max-width: 95%;
-        padding: 10px 12px;
-    }
-
     .logo h1 {
-        font-size: 2.2rem; /* Adjust logo size */
+        font-size: 2rem;
     }
-
-    .input-area {
-        padding: 10px;
-    }
-
-    #userInput {
-        height: 44px;
-        padding: 10px 12px;
-    }
-
-    /* Make buttons slightly larger tap targets */
-    #sendButton, #micButton, #enableMicButton {
-        min-width: 48px; 
-        min-height: 48px; 
-        padding: 10px; /* Ensure padding doesn't shrink them */
-    }
-    
-    #sendButton, #micButton {
-        width: 48px;
-        height: 48px;
-        font-size: 1.2rem; /* Slightly larger icon */
-    }
-    
-    #enableMicButton {
-        font-size: 0.9rem; /* Adjust text size */
-        width: 100%; /* Make enable button full width */
-        margin-bottom: 15px;
-    }
-
-    .toggle-label {
+    .logo h2 {
         font-size: 0.8rem;
     }
-    
-    /* Improve radio button tap targets */
-    .radio-label {
-        padding: 10px 15px;
-        font-size: 0.9rem;
+    #userInput {
+        padding: 10px;
+        min-height: 44px;
     }
-} 
+    #sendButton, #micButton {
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 1rem;
+    }
+    #enableMicButton, .generic-button {
+        padding: 8px 15px;
+        font-size: 0.85rem;
+    }
+    .toggle-label {
+        font-size: 0.75rem;
+    }
+    .radio-label {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    .sidebar {
+        max-height: 250px;
+    }
+    .debug-log {
+        max-height: 150px;
+    }
+    #visualizer-container {
+        min-height: 60px;
+    }
+    #audioVisualizer {
+        height: 60px;
+    }
+}
+
+/* Styling for OpenAI Voice Selector (if it becomes visible) */
+#openaiVoiceSelectorContainer {
+    display: flex; /* Default, but app.js controls visibility */
+    align-items: center;
+    gap: 8px;
+    background-color: var(--bg-accent);
+    padding: 8px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.4);
+}
+
+#openaiVoiceSelectorContainer .toggle-label { /* Re-using toggle-label for consistency */
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-bottom: 0; /* Reset margin if any from general toggle-label */
+}
+
+.voice-select {
+    background-color: var(--bg-secondary); /* Slightly different from bg-accent for depth */
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 6px 10px; /* Adjusted padding */
+    font-family: var(--font-secondary);
+    font-size: 0.8rem; /* Adjusted size */
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.voice-select:hover {
+    border-color: var(--accent-magenta);
+}
+
+.voice-select:focus {
+    outline: none;
+    border-color: var(--accent-magenta);
+    box-shadow: 0 0 8px var(--shadow-color-magenta);
+}
+
+/* New Voice Chip Selector Styles */
+.vortex-voice-selector-container {
+    display: flex; /* Managed by JS, but good default */
+    align-items: center;
+    gap: 10px;
+    background-color: rgba(var(--bg-accent-rgb, 28, 32, 46), 0.7); /* Use RGB for opacity if var() is color name */
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.voice-selector-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: var(--font-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.voice-chips {
+    display: flex;
+    gap: 6px;
+}
+
+.voice-chip {
+    padding: 6px 12px;
+    font-family: var(--font-secondary);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background-color: var(--bg-accent);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: var(--glow-transition), color 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.voice-chip:hover {
+    color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+    background-color: var(--bg-secondary); /* Slightly lighter on hover */
+    box-shadow: 0 0 8px var(--shadow-color-cyan);
+    transform: translateY(-1px);
+}
+
+.voice-chip.active {
+    color: var(--bg-primary);
+    background-color: var(--accent-magenta);
+    border-color: var(--accent-magenta);
+    box-shadow: 0 0 10px var(--shadow-color-magenta), 0 0 3px var(--shadow-color-magenta) inset;
+    font-weight: bold;
+}
+
+.voice-chip.active:hover {
+    color: var(--bg-primary); /* Keep text dark on active hover */
+    background-color: var(--accent-magenta);
+    filter: brightness(1.2);
+}
+
+/* Control Buttons (e.g., Stop Speaking) */
+.control-button {
+    padding: 8px 15px;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background-color: var(--bg-accent);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: var(--glow-transition), color 0.3s ease;
+    display: flex; /* For icon and text alignment */
+    align-items: center;
+    gap: 8px;
+}
+
+.control-button:hover {
+    color: var(--accent-orange);
+    border-color: var(--accent-orange);
+    background-color: var(--bg-secondary);
+    box-shadow: 0 0 8px rgba(255, 165, 0, 0.7); /* Orange glow */
+    transform: translateY(-1px);
+}
+
+.control-button:active {
+    transform: translateY(0);
+    box-shadow: 0 0 5px rgba(255, 165, 0, 0.5);
+}
+
+.control-button i {
+    font-size: 1rem; /* Adjust icon size if needed */
+    margin-right: 5px;
+}
+
+/* --- BEGIN ADDED STYLES FOR CAPABILITIES DISPLAY --- */
+.capabilities-display {
+    padding: 15px;
+    margin-top: 15px; /* Space below visualizer */
+    margin-bottom: 15px; /* Space above footer */
+    background-color: var(--bg-secondary); /* Give it a background like other sections */
+    border: 1px solid var(--border-color); /* Give it a border like other sections */
+    border-radius: 4px; /* Match other section rounding */
+    /* width: 100%; /* Let it naturally take width of container, or set explicitly if needed */
+    max-height: 120px; /* Adjusted max height */
+    overflow-y: auto;
+    line-height: 1.6;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6); /* Match microphone-selector style */
+}
+
+.capabilities-display h4 {
+    color: var(--accent-magenta); /* Match other section titles */
+    /* margin-top: 0; /* Already handled by container padding */
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    font-family: var(--font-primary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.capability-tag {
+    display: inline-block; /* Allows margin/padding and sits inline */
+    background-color: var(--bg-accent); /* Darker tag background */
+    color: var(--accent-cyan); /* Bright text color for the tag */
+    padding: 4px 10px;
+    margin-right: 6px;
+    margin-bottom: 6px; /* For wrapping */
+    border-radius: 3px;
+    font-size: 0.8em;
+    cursor: default; /* Or 'pointer' if you plan to make them clickable */
+    border: 1px solid var(--border-color);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.capability-tag:hover {
+    background-color: var(--accent-cyan);
+    color: var(--bg-primary);
+    border-color: var(--accent-cyan);
+}
+/* --- END ADDED STYLES FOR CAPABILITIES DISPLAY --- */ 

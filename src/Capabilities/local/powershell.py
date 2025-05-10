@@ -8,6 +8,7 @@ import subprocess
 import time
 from dotenv import load_dotenv
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 import requests
 
 # Constants
@@ -51,8 +52,7 @@ def powershell(permission: bool = False, command: str = "", returnoutput: bool =
 		return f"⚠️ This command requires explicit permission: {command}"
 	
 	try:
-		if get_debug_mode():
-			print(f"[EXECUTING POWERSHELL] {command}")
+		log_debug_event(f"EXECUTING POWERSHELL: {command}")
 		
 		# Execute the PowerShell command
 		process = subprocess.Popen(

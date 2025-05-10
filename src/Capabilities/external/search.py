@@ -5,6 +5,7 @@ import requests
 import wikipediaapi
 import src.Boring.capabilities as capabilities
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.boring import log_debug_event
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -28,8 +29,7 @@ def search_query(query: str, search_type: str = "google") -> dict:
 	"""
 	search_type = search_type.lower()
 	
-	if get_debug_mode():
-		print(f"[🔍 SEARCH] {search_type.capitalize()}: {query}")
+	log_debug_event(f"SEARCH ({search_type.capitalize()}): {query}")
 	
 	if search_type == "google":
 		return google_search(query)

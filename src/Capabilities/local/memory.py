@@ -8,6 +8,7 @@ import numpy as np
 import faiss
 from dotenv import load_dotenv
 from src.Capabilities.debug_mode import get_debug_mode
+from src.Boring.debug_logger import log_debug_event
 
 # Load environment variables
 load_dotenv()
@@ -37,8 +38,7 @@ def retrieve_memory(query: str):
 		if not query:
 			return []
 		
-		if get_debug_mode():
-			print(f"[🧠 MEMORY CHECK] Searching for memories related to: {query}")
+		log_debug_event(f"MEMORY CHECK: Searching for memories related to: {query}")
 		
 		if not os.path.exists(MEMORY_FILE):
 			return []

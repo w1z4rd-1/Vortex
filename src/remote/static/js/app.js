@@ -16,6 +16,8 @@ let audioQueue = [];
 let isProcessingAudio = false;
 let recognition = null;
 let wakeWordModel = null;
+let selectedOpenAIVoice = 'nova'; // Default OpenAI voice
+let currentPlayingTTSAudio = null; // To keep track of backend TTS audio object
 
 // DOM Elements
 const conversationElement = document.getElementById('conversation');
@@ -30,8 +32,9 @@ const visualizerElement = document.getElementById('audioVisualizer');
 const enableMicButtonElement = document.getElementById('enableMicButton');
 const micInitPromptElement = document.getElementById('mic-init-prompt');
 const micStatusElement = document.getElementById('mic-status');
-const openaiVoiceSelectorContainerElement = document.getElementById('openaiVoiceSelectorContainer');
-const openaiVoiceSelectElement = document.getElementById('openaiVoiceSelect');
+const vortexVoiceSelectorContainerElement = document.getElementById('vortexVoiceSelector'); // Updated ID
+const voiceChipElements = document.querySelectorAll('.voice-chip'); // Get all voice chips
+const stopSpeakingButtonElement = document.getElementById('stopSpeakingButton'); // New stop button
 
 // Constants
 const WAKE_WORD = 'vortex';
@@ -50,6 +53,8 @@ async function initializeApplication() {
     try {
         // Setup event listeners (including the new mic button)
         setupEventListeners();
+        setupVoiceChipListeners(); // New function for voice chips
+        setupStopSpeakingButtonListener(); // New function for stop button
         
         // Initialize Socket.io
         initializeSocketConnection();
@@ -119,6 +124,60 @@ function setupEventListeners() {
 }
 
 /**
+ * Setup event listeners for voice chip selection
+ */
+function setupVoiceChipListeners() {
+    voiceChipElements.forEach(chip => {
+        chip.addEventListener('click', () => {
+            // Remove active class from all chips
+            voiceChipElements.forEach(c => c.classList.remove('active'));
+            // Add active class to the clicked chip
+            chip.classList.add('active');
+            // Update the selected voice
+            selectedOpenAIVoice = chip.dataset.voice;
+            logDebug(`OpenAI Voice selected: ${selectedOpenAIVoice}`);
+        });
+    });
+
+    // Ensure default selected voice has active class on load (already set in HTML, but good for dynamic cases)
+    const defaultChip = document.querySelector(`.voice-chip[data-voice="${selectedOpenAIVoice}"]`);
+    if (defaultChip && !defaultChip.classList.contains('active')) {
+        voiceChipElements.forEach(c => c.classList.remove('active'));
+        defaultChip.classList.add('active');
+    }
+}
+
+/**
+ * Setup event listener for the stop speaking button
+ */
+function setupStopSpeakingButtonListener() {
+    if (!stopSpeakingButtonElement) return;
+
+    stopSpeakingButtonElement.addEventListener('click', () => {
+        if (currentPlayingTTSAudio) {
+            currentPlayingTTSAudio.pause();
+            currentPlayingTTSAudio.src = ''; // Stop download/buffering
+            currentPlayingTTSAudio = null;
+            updateStopSpeakingButtonVisibility(false);
+            logDebug('Backend TTS playback stopped by user.');
+        } else if (window.speechSynthesis && speechSynthesis.speaking) {
+            speechSynthesis.cancel(); // This should trigger utterance.onend
+            // updateStopSpeakingButtonVisibility(false); // onend should handle this
+            logDebug('Browser speech synthesis stopped by user.');
+        }
+    });
+}
+
+/**
+ * Show or hide the stop speaking button
+ * @param {boolean} show - True to show, false to hide
+ */
+function updateStopSpeakingButtonVisibility(show) {
+    if (!stopSpeakingButtonElement) return;
+    stopSpeakingButtonElement.style.display = show ? 'flex' : 'none';
+}
+
+/**
  * Initialize Socket.io connection
  */
 function initializeSocketConnection() {
@@ -150,6 +209,54 @@ function initializeSocketConnection() {
     socket.on('error', (data) => {
         logDebug(`Error: ${data.message}`, true);
     });
+
+    // Listen for debug log events from the backend
+    socket.on('backend_debug_log', (data) => {
+        if (data && typeof data.message === 'string') {
+            logDebug(`[BACKEND] ${data.message}`, data.is_error || false);
+        }
+    });
+
+    // --- BEGIN ADDED CODE FOR CAPABILITIES LIST ---
+    socket.on('capabilities_list_update', function(data) {
+        console.log('>>> BROWSER CONSOLE: Frontend received capabilities_list_update:', data); 
+
+        const capabilitiesDisplayArea = document.getElementById('capabilities-display-area'); // <-- Updated ID
+
+        if (!capabilitiesDisplayArea) {
+            console.error('>>> BROWSER CONSOLE: HTML element with ID "capabilities-display-area" NOT FOUND.');
+            return;
+        }
+
+        capabilitiesDisplayArea.innerHTML = ''; // Clear previous list
+
+        if (data && data.available_functions && data.available_functions.length > 0) {
+            const titleElement = document.createElement('h4'); // Optional: Add a title if you want
+            titleElement.textContent = 'Available Capabilities:';
+            titleElement.style.marginTop = '10px'; // Some basic styling for the title
+            titleElement.style.marginBottom = '5px';
+            capabilitiesDisplayArea.appendChild(titleElement);
+
+            data.available_functions.forEach(funcName => {
+                const span = document.createElement('span');
+                span.textContent = funcName;
+                span.className = 'capability-tag'; // Add a class for styling
+                capabilitiesDisplayArea.appendChild(span);
+            });
+        } else if (data && data.error) {
+            console.error('>>> BROWSER CONSOLE: Error from backend while fetching capabilities:', data.error, data.details);
+            capabilitiesDisplayArea.innerHTML = `<p style="color: red;">Error: ${data.details || data.error}</p>`;
+        } else {
+            // Optionally add a title even if no capabilities
+            const titleElement = document.createElement('h4');
+            titleElement.textContent = 'Available Capabilities:';
+            titleElement.style.marginTop = '10px';
+            titleElement.style.marginBottom = '5px';
+            capabilitiesDisplayArea.appendChild(titleElement);
+            capabilitiesDisplayArea.appendChild(document.createTextNode('No capabilities currently registered.'));
+        }
+    });
+    // --- END ADDED CODE FOR CAPABILITIES LIST ---
 }
 
 /**
@@ -475,15 +582,25 @@ function addMessageToChatWindow(text, role) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${role}-message`;
     
-    let formattedText = text;
+    // Create a container for the message content
+    const contentElement = document.createElement('div');
+    contentElement.className = 'message-content';
+    
+    // Sanitize text before adding to innerHTML or use textContent if no HTML is intended
+    // For simplicity, assuming text is plain or already sanitized on server.
+    // If text can contain HTML and isn't sanitized, this is a potential XSS vulnerability.
+    // Using textContent for safety if no HTML is intended in messages:
+    contentElement.textContent = text;
+    // If HTML is intended and sanitized:
+    // contentElement.innerHTML = text;
     
     // Add message timestamp
-    const timestamp = document.createElement('div');
-    timestamp.className = 'message-timestamp';
-    timestamp.textContent = new Date().toLocaleTimeString();
+    const timestampElement = document.createElement('div');
+    timestampElement.className = 'message-timestamp';
+    timestampElement.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    messageElement.innerHTML = formattedText;
-    messageElement.appendChild(timestamp);
+    messageElement.appendChild(contentElement);
+    messageElement.appendChild(timestampElement);
     
     // Add to conversation
     conversationElement.appendChild(messageElement);
@@ -544,9 +661,9 @@ async function checkServerHealth() {
 
         // Show/hide OpenAI voice selector based on provider
         if (data.ai_provider === 'openai') {
-            openaiVoiceSelectorContainerElement.style.display = 'flex'; // Or 'block' depending on desired layout
+            if(vortexVoiceSelectorContainerElement) vortexVoiceSelectorContainerElement.style.display = 'flex';
         } else {
-            openaiVoiceSelectorContainerElement.style.display = 'none';
+            if(vortexVoiceSelectorContainerElement) vortexVoiceSelectorContainerElement.style.display = 'none';
         }
         
         if (!data.ffmpeg_available) {
@@ -570,12 +687,13 @@ async function checkServerHealth() {
  */
 async function speakText(text) {
     if (!isSpeechEnabled || !text) return;
+    updateStopSpeakingButtonVisibility(false); // Ensure it's hidden before trying to speak
 
     // Try to use OpenAI TTS via backend first
     try {
         const payload = { text };
-        if (openaiVoiceSelectorContainerElement.style.display !== 'none') {
-            payload.voice = openaiVoiceSelectElement.value;
+        if (vortexVoiceSelectorContainerElement && vortexVoiceSelectorContainerElement.style.display !== 'none') {
+            payload.voice = selectedOpenAIVoice;
         }
 
         const response = await fetch('/api/tts', {
@@ -590,11 +708,24 @@ async function speakText(text) {
             const audioBlob = await response.blob();
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
-            audio.play();
+            currentPlayingTTSAudio = audio; // Store reference
+
+            audio.onplay = () => {
+                updateStopSpeakingButtonVisibility(true);
+                logDebug('Playing audio via OpenAI TTS from backend.');
+            };
             audio.onended = () => {
                 URL.revokeObjectURL(audioUrl); // Clean up blob URL
+                currentPlayingTTSAudio = null;
+                updateStopSpeakingButtonVisibility(false);
             };
-            logDebug('Playing audio via OpenAI TTS from backend.');
+            audio.onerror = () => {
+                URL.revokeObjectURL(audioUrl);
+                currentPlayingTTSAudio = null;
+                updateStopSpeakingButtonVisibility(false);
+                logDebug('Error playing TTS audio from backend.', true);
+            };
+            audio.play();
             return; // Successfully played OpenAI TTS
         } else if (response.status === 202) {
             logDebug('OpenAI TTS not configured on backend, falling back to browser speech synthesis.');
@@ -617,6 +748,17 @@ async function speakText(text) {
 
     const utterance = new SpeechSynthesisUtterance(text);
     let voices = speechSynthesis.getVoices();
+
+    utterance.onstart = () => {
+        updateStopSpeakingButtonVisibility(true);
+    };
+    utterance.onend = () => {
+        updateStopSpeakingButtonVisibility(false);
+    };
+    utterance.onerror = (event) => {
+        updateStopSpeakingButtonVisibility(false);
+        logDebug(`Speech synthesis error: ${event.error}`, true);
+    };
 
     if (voices.length === 0) {
         speechSynthesis.onvoiceschanged = () => { // Use onvoiceschanged for broader compatibility

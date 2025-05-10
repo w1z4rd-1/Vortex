@@ -54,6 +54,21 @@ Capabilities Status:
 - Loaded Modules: {status_info["loaded_modules"]}
 - Total Registration Count: {status_info["registration_count"]}
 """
+			try:
+				registry_details = inspect_registry()
+				if isinstance(registry_details, dict):
+					available_functions_list = registry_details.get("available_functions", [])
+					if available_functions_list:
+						status_msg += "\n\nRegistered Capability Names:\n"
+						for func_name in available_functions_list:
+							status_msg += f"- {func_name}\n"
+					else:
+						status_msg += "\n\nRegistered Capability Names: (No functions found or list is empty)\n"
+				else: # inspect_registry might return an error string
+					status_msg += f"\n\nCould not retrieve list of capability names. inspect_registry reported: {registry_details}\n"
+			except Exception as inspect_e:
+				status_msg += f"\n\nAn error occurred while trying to list capability names: {inspect_e}\n"
+			
 			return status_msg
 		except Exception as e:
 			return f"Debug mode {status}. Could not retrieve capabilities status: {e}"

@@ -29,16 +29,20 @@
                         <span class="toggle-label">Speech Output</span>
                     </label>
                 </div>
-                <div class="toggle-container" id="openaiVoiceSelectorContainer" style="display: none;">
-                    <label for="openaiVoiceSelect" class="toggle-label" style="margin-right: 10px;">OpenAI Voice:</label>
-                    <select id="openaiVoiceSelect" class="voice-select">
-                        <option value="alloy">Alloy</option>
-                        <option value="echo">Echo</option>
-                        <option value="fable">Fable</option>
-                        <option value="onyx">Onyx</option>
-                        <option value="nova" selected>Nova</option>
-                        <option value="shimmer">Shimmer</option>
-                    </select>
+                <button id="stopSpeakingButton" class="control-button" style="display: none;">
+                    <i class="fas fa-stop-circle"></i> Stop
+                </button>
+                <!-- OpenAI Voice Selector - New Structure -->
+                <div id="vortexVoiceSelector" class="vortex-voice-selector-container" style="display: none;">
+                    <span class="voice-selector-label">AI Voice:</span>
+                    <div class="voice-chips">
+                        <button class="voice-chip" data-voice="alloy">Alloy</button>
+                        <button class="voice-chip" data-voice="echo">Echo</button>
+                        <button class="voice-chip" data-voice="fable">Fable</button>
+                        <button class="voice-chip" data-voice="onyx">Onyx</button>
+                        <button class="voice-chip active" data-voice="nova">Nova</button> <!-- Default active -->
+                        <button class="voice-chip" data-voice="shimmer">Shimmer</button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -73,6 +77,7 @@
         <div id="visualizer-container">
             <canvas id="audioVisualizer"></canvas>
         </div>
+        <div id="capabilities-display-area" class="capabilities-display"></div>
 
         <footer>
             <p>made by wizard1</p>

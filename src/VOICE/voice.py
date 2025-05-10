@@ -14,6 +14,7 @@ import subprocess # For subprocess-based TTS as fallback
 import multiprocessing  # For process-based TTS
 from vosk import Model, KaldiRecognizer  # For wake word detection
 from src.Capabilities.debug_mode import set_debug_mode, get_debug_mode
+from src.Boring.boring import log_debug_event # Added for new logging
 # Using ffmpeg directly instead of pydub (which requires pyaudioop)
 # from pydub import AudioSegment
 from openai import AsyncOpenAI
@@ -224,10 +225,23 @@ def init_tts():
             # Use a simpler method to test TTS that doesn't rely on multiprocessing
             try:
                 # Just test the engine directly
-                engine.say("TTS test")
-                engine.runAndWait()
-                engine.stop()
-                print("✅ Text-to-Speech initialized successfully (direct mode)")
+                # engine.say("TTS test")
+                # engine.runAndWait()
+                # engine.stop() # stop should still be called to release engine resources after test or init.
+
+                # To ensure the engine is actually working without speaking, 
+                # we can try to get a property or a very short, silent synthesis.
+                # For now, let's assume if we reach here without error, it's okay.
+                # If issues arise, a more robust silent check might be needed.
+                # For instance, some engines might not fully initialize or error out until runAndWait or similar is called.
+                # However, for pyttsx3, not calling runAndWait after say() simply means it won't block.
+                # We will still call engine.stop() later if we are re-creating the engine or shutting down.
+                # The main check is that engine initialization didn't throw an error.
+                
+                # A minimal check to see if engine is alive without speaking
+                _ = engine.getProperty('rate') # Try to get a property
+
+                print("✅ Text-to-Speech initialized successfully (direct mode - test phrase skipped)")
                 tts_available = True
             except Exception as e:
                 print(f"⚠️ TTS direct test failed: {e}")
@@ -242,8 +256,7 @@ def init_tts():
                 pass
             
     except Exception as e:
-        if get_debug_mode():
-            print(f"⚠️ TTS initialization error: {e}")
+        log_debug_event(f"TTS initialization error: {e}", is_error=True)
         print(f"⚠️ Error during TTS initialization")
         tts_available = False
 
@@ -255,8 +268,7 @@ try:
     init_thread.start()
     
     # Continue initialization while TTS engine starts up
-    if get_debug_mode():
-        print("TTS initialization running in background...")
+    log_debug_event("TTS initialization running in background...")
     
 except Exception as e:
     print(f"⚠️ Error starting TTS initialization: {e}")
@@ -270,7 +282,7 @@ def tts_speak(text):
         return
     
     # Visual indicator that VORTEX is speaking
-    print(f"{COLOR_GREEN}[�� VORTEX Speaking...]{COLOR_RESET}")
+    print(f"{COLOR_GREEN}[💬 VORTEX Speaking...]{COLOR_RESET}")
     
     # If using OpenAI, handle TTS differently
     if AI_PROVIDER == "openai" and openai_client:
@@ -286,8 +298,7 @@ def tts_speak(text):
             # Use the requests library directly to avoid asyncio conflicts
             
             # Print debug info
-            if get_debug_mode():
-                print(f"[🔊 OpenAI TTS] Generating speech for: {text[:50]}...")
+            log_debug_event(f"OpenAI TTS: Generating speech for: {text[:50]}...")
             
             # OpenAI API key for authorization
             headers = {
@@ -312,8 +323,7 @@ def tts_speak(text):
                 with open(speech_file_path, "wb") as f:
                     f.write(response.content)
                 
-                if get_debug_mode():
-                    print(f"[✅ OpenAI TTS] Generated audio saved to {speech_file_path}")
+                log_debug_event(f"OpenAI TTS: Generated audio saved to {speech_file_path}")
                 
                 # Play the generated audio
                 play_audio(speech_file_path)
@@ -328,8 +338,7 @@ def tts_speak(text):
     # Local TTS handling (existing code)
     with tts_queue_lock:
         tts_queue.append(text)
-        if get_debug_mode():
-            print(f"[Added to TTS queue]: {text[:30]}{'...' if len(text) > 30 else ''}")
+        log_debug_event(f"Added to TTS queue: {text[:30]}{'...' if len(text) > 30 else ''}")
     
     # Start the TTS thread if not already running
     if tts_thread is None or not tts_thread.is_alive():
@@ -351,8 +360,7 @@ def process_tts_queue():
                     text_to_speak = tts_queue.pop(0)
                     tts_is_speaking = True
                     # Only print in debug mode
-                    if get_debug_mode():
-                        print(f"[🔊 Processing speech: {text_to_speak[:30]}{'...' if len(text_to_speak) > 30 else ''}]")
+                    log_debug_event(f"Processing speech: {text_to_speak[:30]}{'...' if len(text_to_speak) > 30 else ''}")
             
             if text_to_speak:
                 # If TTS is not available, just print the text
@@ -361,8 +369,7 @@ def process_tts_queue():
                     time.sleep(len(text_to_speak) * 0.05)  # Simulate speaking time
                 else:
                     # Only print in debug mode
-                    if get_debug_mode():
-                        print(f"[🔊 Speaking: {text_to_speak}]")
+                    log_debug_event(f"Speaking: {text_to_speak}")
                     
                     try:
                         # Direct TTS - safer but may block the thread
@@ -384,8 +391,7 @@ def process_tts_queue():
                 # Visual indicator when finished speaking
                 if tts_queue:
                     # More to speak
-                    if get_debug_mode():
-                        print(f"{COLOR_GREEN}[🔄 VORTEX continuing...]{COLOR_RESET}")
+                    log_debug_event("VORTEX continuing speech queue...")
                 else:
                     # Done with all speech
                     print(f"{COLOR_GREEN}[✓ VORTEX finished speaking]{COLOR_RESET}")
@@ -394,8 +400,7 @@ def process_tts_queue():
             time.sleep(0.1)
             
         except Exception as e:
-            if get_debug_mode():
-                print(f"[❌ ERROR in TTS queue processor: {e}]")
+            log_debug_event(f"ERROR in TTS queue processor: {e}", is_error=True)
             time.sleep(0.5)  # Wait a bit before trying again
 
 def is_tts_available():
@@ -465,8 +470,7 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
     if ignore_if_speaking:
         with tts_queue_lock:
             if tts_is_speaking or tts_queue:
-                if get_debug_mode():
-                    print("[DEBUG] Ignoring potential wake word - TTS is active")
+                log_debug_event("Ignoring potential wake word - TTS is active")
                 return False
     
     model_path = os.path.join("models", "vosk-model-small-en-us-0.15")
@@ -476,7 +480,7 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
         return False
 
     if get_debug_mode():
-        print(f"[DEBUG] Listening for wake word '{WAKE_WORD}' (and variations)...")
+        log_debug_event(f"Listening for wake word '{WAKE_WORD}' (and variations)...")
     # Don't print basic instruction here, VORTEX.py does it.
 
     CHUNK = 2048
@@ -503,15 +507,14 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
             try:
                 data = stream.read(CHUNK, exception_on_overflow=False)
             except IOError as e:
-                if get_debug_mode(): print(f"[WARNING] Audio stream read error: {e}")
+                log_debug_event(f"Audio stream read error: {e}", is_error=True)
                 continue
 
             # Check TTS status periodically during wake word detection
             if ignore_if_speaking:
                 with tts_queue_lock:
                     if tts_is_speaking or tts_queue:
-                        if get_debug_mode():
-                            print("[DEBUG] TTS started speaking, exiting wake word detection")
+                        log_debug_event("TTS started speaking, exiting wake word detection")
                         return False
 
             partial = json.loads(recognizer.PartialResult())
@@ -534,8 +537,8 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
                             detected_variation = variation
                             print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected! (Confidence: {confidence:.2f})]{COLOR_RESET}")
                             return True
-                        elif get_debug_mode():
-                            print(f"[DEBUG] Low confidence wake word detection: {variation} ({confidence:.2f})")
+                        else:
+                            log_debug_event(f"Low confidence wake word detection: {variation} ({confidence:.2f})")
 
             if recognizer.AcceptWaveform(data):
                 result = json.loads(recognizer.Result())
@@ -558,8 +561,8 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
                                 detected_variation = variation
                                 print(f"{COLOR_GREEN}[Wake word '{detected_variation}' detected! (Confidence: {confidence:.2f})]{COLOR_RESET}")
                                 return True
-                            elif get_debug_mode():
-                                print(f"[DEBUG] Low confidence wake word detection: {variation} ({confidence:.2f})")
+                            else:
+                                log_debug_event(f"Low confidence wake word detection: {variation} ({confidence:.2f})")
 
             # Check keyboard only if available
             if msvcrt_available and msvcrt.kbhit():
@@ -572,8 +575,7 @@ def detect_wake_word(return_buffer=False, ignore_if_speaking=True):
         print("\n[KeyboardInterrupt in wake word detector]")
         return False # Indicate stop
     except Exception as e:
-        if get_debug_mode(): print(f"[ERROR] Wake word detection error: {e}")
-        else: print("[ERROR] Wake word detection failed")
+        log_debug_event(f"Wake word detection error: {e}", is_error=True)
         return False # Indicate error, let main loop retry
     finally:
         if stream is not None:
@@ -664,12 +666,12 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
     RATE = 16000
 
     if get_debug_mode():
-        print("[DEBUG] record_audio: Starting recording function")
+        log_debug_event("record_audio: Starting recording function")
     
     # Ensure temp directory exists
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     if get_debug_mode():
-        print(f"[DEBUG] record_audio: Ensured temp directory exists at {os.path.dirname(filename)}")
+        log_debug_event(f"record_audio: Ensured temp directory exists at {os.path.dirname(filename)}")
 
     # Set up a ring buffer for pre-recording (5 chunks = ~0.3 seconds)
     ring_buffer_size = 5
@@ -679,13 +681,13 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
     try:
         audio = pyaudio.PyAudio()
         if get_debug_mode():
-            print("[DEBUG] record_audio: PyAudio initialized")
+            log_debug_event("record_audio: PyAudio initialized")
         
         # Start stream immediately to capture any initial words
         stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE,
                             input=True, frames_per_buffer=CHUNK)
         if get_debug_mode():
-            print("[DEBUG] record_audio: Audio stream opened")
+            log_debug_event("record_audio: Audio stream opened")
 
         # All frames that will be saved to the file
         frames = []
@@ -696,7 +698,7 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
         
         # Fill the ring buffer with initial audio
         if get_debug_mode():
-            print("[DEBUG] Capturing pre-recording buffer...")
+            log_debug_event("Capturing pre-recording buffer...")
         for i in range(ring_buffer_size):
             data = stream.read(CHUNK, exception_on_overflow=False)
             ring_buffer[i] = data
@@ -713,14 +715,14 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
         max_recording_time = 10  # Maximum recording time in seconds
 
         if get_debug_mode():
-            print("[DEBUG] record_audio: Starting recording loop")
+            log_debug_event("record_audio: Starting recording loop")
         start_time = time.time()
         
         # Wait for speech to actually start by detecting when audio rises above threshold
         # This ensures we start with actual speech not silence
         speech_started = False
         if get_debug_mode():
-            print("[DEBUG] Waiting for speech to start...")
+            log_debug_event("Waiting for speech to start...")
         timeout_start = time.time()
         
         # Wait up to 2 seconds for speech to start
@@ -738,15 +740,15 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
             if volume > silence_threshold * 1.5:  # Higher threshold to ensure it's actually speech
                 speech_started = True
                 if get_debug_mode():
-                    print(f"[DEBUG] Speech detected! Volume: {volume}")
+                    log_debug_event(f"Speech detected! Volume: {volume}")
             else:
                 # Every 0.5 seconds, show the volume level while waiting
-                if get_debug_mode() and int((time.time() - timeout_start) * 2) > int((time.time() - timeout_start - 0.1) * 2):
-                    print(f"[DEBUG] Waiting for speech... Volume: {volume}")
+                if int((time.time() - timeout_start) * 2) > int((time.time() - timeout_start - 0.1) * 2):
+                    log_debug_event(f"Waiting for speech... Volume: {volume}")
         
         # If speech didn't start, use the buffer we collected anyway
         if not speech_started and get_debug_mode():
-            print("[DEBUG] No clear speech start detected, using collected buffer")
+            log_debug_event("No clear speech start detected, using collected buffer")
         
         # Reset the speech timing
         last_audio_time = time.time()
@@ -766,7 +768,7 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
             # Enforce maximum recording time
             if seconds_recorded > max_recording_time:
                 if get_debug_mode():
-                    print(f"[DEBUG] record_audio: Maximum recording time reached ({max_recording_time}s)")
+                    log_debug_event(f"record_audio: Maximum recording time reached ({max_recording_time}s)")
                 capturing = False
                 break
                 
@@ -775,14 +777,14 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
             volume = np.abs(audio_data).mean()
             
             # Every second, print the current volume
-            if get_debug_mode() and int(seconds_recorded) > int(seconds_recorded - 0.1):
-                print(f"[DEBUG] record_audio: Current volume: {volume}")
+            if int(seconds_recorded) > int(seconds_recorded - 0.1):
+                log_debug_event(f"record_audio: Current volume: {volume}")
             
             if volume < silence_threshold:
                 silence_time = time.time() - last_audio_time
                 if silence_time > silence_duration:
                     if get_debug_mode():
-                        print(f"[DEBUG] record_audio: Silence detected for {silence_time:.2f}s, stopping recording")
+                        log_debug_event(f"record_audio: Silence detected for {silence_time:.2f}s, stopping recording")
                     capturing = False
             else:
                 last_audio_time = time.time()
@@ -793,7 +795,7 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
         raise
     finally:
         if get_debug_mode():
-            print("[DEBUG] record_audio: Closing audio stream")
+            log_debug_event("record_audio: Closing audio stream")
         try:
             stream.stop_stream()
             stream.close()
@@ -802,8 +804,8 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
             print(f"[ERROR] record_audio cleanup exception: {e}")
 
     if get_debug_mode():
-        print(f"[DEBUG] record_audio: Recorded {len(frames)} frames, {seconds_recorded:.2f} seconds")
-        print(f"[DEBUG] record_audio: Saving to {filename}")
+        log_debug_event(f"record_audio: Recorded {len(frames)} frames, {seconds_recorded:.2f} seconds")
+        log_debug_event(f"record_audio: Saving to {filename}")
     
     try:
         with wave.open(filename, 'wb') as wf:
@@ -812,7 +814,7 @@ def record_audio(filename="temp/recorded_audio.wav", silence_threshold=100, sile
             wf.setframerate(RATE)
             wf.writeframes(b''.join(frames))
         if get_debug_mode():
-            print(f"[DEBUG] record_audio: File saved successfully, size: {os.path.getsize(filename)} bytes")
+            log_debug_event(f"record_audio: File saved successfully, size: {os.path.getsize(filename)} bytes")
     except Exception as e:
         print(f"[ERROR] record_audio save exception: {e}")
         raise
@@ -825,7 +827,7 @@ async def transcribe_audio(audio_path):
     Returns the transcription text or None on error.
     """
     if get_debug_mode():
-        print(f"[Transcribing audio: {audio_path}]")
+        log_debug_event(f"Transcribing audio: {audio_path}")
     
     # Check if we should use OpenAI's Whisper
     if AI_PROVIDER == "openai" and openai_client:
