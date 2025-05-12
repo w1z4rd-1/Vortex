@@ -116,49 +116,14 @@ def wikipedia_search(query: str) -> dict:
 
 def youtube_search(query: str) -> dict:
 	"""
-	Searches YouTube for the query and returns top results.
+	Searches YouTube for the query and returns a direct search URL.
 	
 	Parameters:
 	- query (str): The search query
 	
 	Returns:
-	- dict: YouTube search results
+	- dict: YouTube search URL
 	"""
-	if not GOOGLE_SEARCH_KEY:
-		return {"error": "YouTube search requires a Google API key."}
-	
-	try:
-		url = "https://www.googleapis.com/youtube/v3/search"
-		params = {
-			"key": GOOGLE_SEARCH_KEY,
-			"q": query,
-			"part": "snippet",
-			"type": "video",
-			"maxResults": 5
-		}
-		
-		response = requests.get(url, params=params)
-		data = response.json()
-		
-		if "items" not in data or not data["items"]:
-			return {"error": "No YouTube videos found."}
-		
-		results = []
-		for item in data["items"]:
-			video_id = item["id"]["videoId"]
-			title = item["snippet"]["title"]
-			description = item["snippet"]["description"]
-			channel = item["snippet"]["channelTitle"]
-			url = f"https://www.youtube.com/watch?v={video_id}"
-			
-			results.append(f"{title}\nChannel: {channel}\nURL: {url}\n{description}\n")
-		
-		return {"result": "\n".join(results)}
-	
-	except requests.exceptions.RequestException as e:
-		return {"error": f"YouTube API request failed: {str(e)}"}
-	
-	# Fallback to simple URL if API fails
 	formatted_query = query.replace(" ", "+")
 	search_url = f"https://www.youtube.com/results?search_query={formatted_query}"
 	return {"result": f"YouTube search results: {search_url}"}
